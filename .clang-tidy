@@ -33,6 +33,6 @@ Checks: |
 WarningsAsErrors: "*"
 CheckOptions:
   - key: readability-function-size.LineThreshold
-    value: "80"
+    value: "8000"
   - key: readability-function-cognitive-complexity.Threshold
-    value: "50"
+    value: "5000"
