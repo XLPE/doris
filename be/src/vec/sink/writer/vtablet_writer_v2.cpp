@@ -413,7 +413,7 @@ Status VTabletWriterV2::write(RuntimeState* state, Block& input_block) {
     if (_state->query_options().dry_run_query) {
         return status;
     }
-
+    LOG(INFO) << "_send_new_partition_batch begin";
     // check out of limit
     RETURN_IF_ERROR(_send_new_partition_batch());
 
@@ -558,6 +558,7 @@ Status VTabletWriterV2::close(Status exec_status) {
     if (status.ok()) {
         SCOPED_TIMER(_profile->total_time_counter());
         _row_distribution._deal_batched = true;
+        LOG(INFO) << "_send_new_partition_batch begin";
         status = _send_new_partition_batch();
     }
 

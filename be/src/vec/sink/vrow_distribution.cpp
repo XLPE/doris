@@ -101,7 +101,7 @@ Status VRowDistribution::automatic_create_partition() {
     request.__set_partitionValues(_partitions_need_create);
     request.__set_be_endpoint(be_endpoint);
 
-    VLOG_NOTICE << "automatic partition rpc begin request " << request;
+    LOG(INFO) << "automatic partition rpc begin request " << request;
     TNetworkAddress master_addr = ExecEnv::GetInstance()->cluster_info()->master_fe_addr;
     int time_out = _state->execution_timeout() * 1000;
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -112,7 +112,7 @@ Status VRowDistribution::automatic_create_partition() {
             time_out));
 
     Status status(Status::create(result.status));
-    VLOG_NOTICE << "automatic partition rpc end response " << result;
+    LOG(INFO) << "automatic partition rpc end response " << result;
     if (result.status.status_code == TStatusCode::OK) {
         // add new created partitions
         RETURN_IF_ERROR(_vpartition->add_partitions(result.partitions));
