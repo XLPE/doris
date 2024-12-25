@@ -23,6 +23,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "util/metrics.h"
+#include "common/logging.h"
 
 namespace doris {
 
@@ -39,6 +40,7 @@ void MetricsAction::handle(HttpRequest* req) {
     }
 
     req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
+    LOG(INFO) << "=============================== MetricsAction =======================================";
     HttpChannel::send_reply(req, str);
 }
 
