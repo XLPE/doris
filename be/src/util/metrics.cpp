@@ -21,7 +21,7 @@
 #include <rapidjson/encodings.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
-
+#include <chrono>
 #include <initializer_list>
 
 #include "common/config.h"
@@ -323,6 +323,7 @@ std::string MetricRegistry::to_prometheus(bool with_tablet_metrics) const {
     // Reorder by MetricPrototype
     EntityMetricsByType entity_metrics_by_types;
     std::lock_guard<std::mutex> l(_lock);
+    auto start_time = std::chrono::high_resolution_clock::now();
     for (const auto& entity : _entities) {
         if (entity.first->_type == MetricEntityType::kTablet && !with_tablet_metrics) {
             continue;
@@ -341,9 +342,11 @@ std::string MetricRegistry::to_prometheus(bool with_tablet_metrics) const {
             }
         }
     }
-
+    auto tick_1_time = std::chrono::high_resolution_clock::now();
+    auto tick_1_cost = std::chrono::duration_cast<std::chrono::microseconds>(tick_1_time - start_time).count();
     // Output
     std::stringstream ss;
+    ss << "tick_1_cost " << tick_1_cost << "\n";
     std::string last_group_name;
     for (const auto& entity_metrics_by_type : entity_metrics_by_types) {
         if (last_group_name.empty() ||
