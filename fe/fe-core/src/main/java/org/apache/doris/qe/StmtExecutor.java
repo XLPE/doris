@@ -684,6 +684,7 @@ public class StmtExecutor {
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         // 解析sql
         parseByNereids();
+        // 标注一下parsedStmt是LogicalPlanAdapter实例
         Preconditions.checkState(parsedStmt instanceof LogicalPlanAdapter,
                 "Nereids only process LogicalPlanAdapter, but parsedStmt is " + parsedStmt.getClass().getName());
         context.getState().setNereids(true);

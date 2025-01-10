@@ -94,8 +94,10 @@ end
 
 
 
-
-
+org/apache/doris/nereids/NereidsPlanner.java  
+plan(StatementBase queryStmt, org.apache.doris.thrift.TQueryOptions queryOptions)   
+distribute   
+splitFragments  
 
 
 
