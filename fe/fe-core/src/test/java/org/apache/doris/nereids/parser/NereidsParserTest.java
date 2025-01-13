@@ -71,6 +71,13 @@ public class NereidsParserTest extends ParserTestBase {
     }
 
     @Test
+    public void testParsePrepareError() {
+        NereidsParser nereidsParser = new NereidsParser();
+        String sql = "SELECT a,b FROM test where c = ?;";
+        Assertions.assertThrowsExactly(ParseException.class, () -> nereidsParser.parseMultiple(sql));
+    }
+
+    @Test
     public void testSingle() {
         NereidsParser nereidsParser = new NereidsParser();
         String sql = "SELECT * FROM test;";
