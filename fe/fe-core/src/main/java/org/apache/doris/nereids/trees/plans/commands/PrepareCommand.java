@@ -108,6 +108,7 @@ public class PrepareCommand extends Command {
                     && ((InsertIntoTableCommand) logicalPlan).getLabelName().isPresent()) {
             throw new org.apache.doris.common.UserException("Only support prepare InsertStmt without label now");
         }
+        //执行计划添加到缓存
         ctx.addPreparedStatementContext(name,
                 new PreparedStatementContext(this, ctx, ctx.getStatementContext(), name));
         if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE) {

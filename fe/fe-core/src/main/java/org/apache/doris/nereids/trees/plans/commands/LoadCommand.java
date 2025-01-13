@@ -162,6 +162,7 @@ public class LoadCommand extends Command implements ForwardWithSync {
         if (tvfProjects.isEmpty()) {
             throw new AnalysisException("Fail to build TVF query, parsed TVF select list requires not null");
         }
+        // 是否是select *
         boolean scanAllTvfCol = (tvfProjects.get(0) instanceof UnboundStar);
 
         OlapTable olapTable = getOlapTable(ctx, dataDesc);
