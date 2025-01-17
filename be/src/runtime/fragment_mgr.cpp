@@ -815,6 +815,7 @@ Status FragmentMgr::exec_plan_fragment(const TPipelineFragmentParams& params,
     {
         SCOPED_RAW_TIMER(&duration_ns);
         Status prepare_st = Status::OK();
+        //构建 pipeline
         ASSIGN_STATUS_IF_CATCH_EXCEPTION(prepare_st = context->prepare(params, _thread_pool.get()),
                                          prepare_st);
         if (!prepare_st.ok()) {

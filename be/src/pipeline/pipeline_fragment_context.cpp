@@ -1388,23 +1388,27 @@ Status PipelineFragmentContext::_create_operator(ObjectPool* pool, const TPlanNo
             sink->set_followed_by_shuffled_operator(sink->is_shuffled_operator());
             op->set_followed_by_shuffled_operator(op->is_shuffled_operator());
         } else {
+            // 1. 创建 probe 侧操作符
             op.reset(new HashJoinProbeOperatorX(pool, tnode, next_operator_id(), descs));
             RETURN_IF_ERROR(cur_pipe->add_operator(
                     op, request.__isset.parallel_instances ? request.parallel_instances : 0));
-
+            // 2. 初始化 DAG（有向无环图）
             const auto downstream_pipeline_id = cur_pipe->id();
             if (_dag.find(downstream_pipeline_id) == _dag.end()) {
                 _dag.insert({downstream_pipeline_id, {}});
             }
+            //3. 创建 build 侧管道
             PipelinePtr build_side_pipe = add_pipeline(cur_pipe);
             _dag[downstream_pipeline_id].push_back(build_side_pipe->id());
-
+            //创建 build 的数据接收器
             DataSinkOperatorPtr sink;
             sink.reset(new HashJoinBuildSinkOperatorX(pool, next_sink_operator_id(), tnode, descs));
+            // build 的数据接收器的目标操作符 ID 为 probe 操作符的 ID
             sink->set_dests_id({op->operator_id()});
+            //初始化 build 侧的 数据接收器
             RETURN_IF_ERROR(build_side_pipe->set_sink(sink));
             RETURN_IF_ERROR(build_side_pipe->sink()->init(tnode, _runtime_state.get()));
-
+            // op 到 pipe 的映射，将 probe 的节点 ID 映射到当前管道和 build 侧管道。
             _pipeline_parent_map.push(op->node_id(), cur_pipe);
             _pipeline_parent_map.push(op->node_id(), build_side_pipe);
             sink->set_followed_by_shuffled_operator(sink->is_shuffled_operator());
@@ -1415,6 +1419,12 @@ Status PipelineFragmentContext::_create_operator(ObjectPool* pool, const TPlanNo
         break;
     }
     case TPlanNodeType::CROSS_JOIN_NODE: {
+        /*
+           probe 是 
+           build 是 sink
+           
+        */
+        // probe
         op.reset(new NestedLoopJoinProbeOperatorX(pool, tnode, next_operator_id(), descs));
         RETURN_IF_ERROR(cur_pipe->add_operator(
                 op, request.__isset.parallel_instances ? request.parallel_instances : 0));
