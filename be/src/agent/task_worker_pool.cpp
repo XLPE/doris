@@ -1316,7 +1316,7 @@ void make_snapshot_callback(StorageEngine& engine, const TAgentTaskRequest& req)
     finish_task_request.__set_snapshot_path(snapshot_path);
     finish_task_request.__set_snapshot_files(snapshot_files);
     finish_task_request.__set_task_status(status.to_thrift());
-
+    // 如果创建快照成功，
     finish_task(finish_task_request);
     remove_task_info(req.task_type, req.signature);
 }
@@ -2012,7 +2012,7 @@ void visible_version_callback(StorageEngine& engine, const TAgentTaskRequest& re
     engine.tablet_manager()->update_partitions_visible_version(
             visible_version_req.partition_version);
 }
-
+// 克隆逻辑参考文档的数据副本管理
 void clone_callback(StorageEngine& engine, const ClusterInfo* cluster_info,
                     const TAgentTaskRequest& req) {
     const auto& clone_req = req.clone_req;

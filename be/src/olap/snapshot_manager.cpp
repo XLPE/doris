@@ -430,10 +430,12 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
             }
             bool is_single_rowset_clone =
                     (request.__isset.start_version && request.__isset.end_version);
+            // 单个版本的行集克隆
             if (is_single_rowset_clone) {
                 LOG(INFO) << "handle compaction clone make snapshot, tablet_id: "
                           << ref_tablet->tablet_id();
                 Version version(request.start_version, request.end_version);
+                // 如果 request 指定了 start_version 和 end_version，则尝试从 ref_tablet 中获取对应版本范围的 Rowset
                 const RowsetSharedPtr rowset = ref_tablet->get_rowset_by_version(version, false);
                 if (rowset && rowset->is_local()) {
                     consistent_rowsets.push_back(rowset);
@@ -449,6 +451,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
             }
             // be would definitely set it as true no matter has missed version or not
             // but it would take no effets on the following range loop
+            // 如果设置了 missing_version，尝试获取这些缺失版本对应的 Rowset
             if (!is_single_rowset_clone && request.__isset.missing_version) {
                 for (int64_t missed_version : request.missing_version) {
                     Version version = {missed_version, missed_version};
@@ -456,6 +459,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
                     const RowsetSharedPtr rowset = ref_tablet->get_rowset_by_version(version, true);
                     if (rowset != nullptr) {
                         if (!rowset->is_local()) {
+                            // cooldowned rowsets 是存储在远程的冷数据
                             // MUST make full snapshot to ensure `cooldown_meta_id` is consistent with the cooldowned rowsets after clone.
                             res = Status::Error<ErrorCode::INTERNAL_ERROR>(
                                     "missed version is a cooldowned rowset, must make full "
@@ -486,6 +490,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
             // be would definitely set it as true no matter has missed version or not, we could
             // just check whether the missed version is empty or not
             int64_t version = -1;
+            // 如果上述两种方法无法满足（例如某些版本缺失），则回退到全量快照
             if (!is_single_rowset_clone && (!res.ok() || request.missing_version.empty())) {
                 if (!request.__isset.missing_version &&
                     ref_tablet->tablet_meta()->cooldown_meta_id().initialized()) {
@@ -515,11 +520,13 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
                                 last_version->version().to_string(), request.version);
                         break;
                     }
+                    //如果请求中有指定版本号 request.version，则使用指定的版本号，否则使用 last_version
                     version = request.version;
                 }
                 if (ref_tablet->tablet_meta()->cooldown_meta_id().initialized()) {
                     // Tablet has cooldowned data, MUST pick consistent rowsets with continuous cooldowned version
                     // Get max cooldowned version
+                    // 如果表包含冷数据（cooldown_meta_id 已初始化），则需确保快照的行集与冷数据版本一致
                     int64_t max_cooldowned_version = -1;
                     for (auto& [v, rs] : ref_tablet->rowset_map()) {
                         if (rs->is_local()) {
@@ -539,6 +546,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
                     }
                 } else {
                     // get shortest version path
+                    // 捕获从初始版本到指定版本的所有行集
                     res = ref_tablet->capture_consistent_rowsets_unlocked(Version(0, version),
                                                                           &consistent_rowsets);
                 }
@@ -566,6 +574,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
         }
 
         std::vector<RowsetMetaSharedPtr> rs_metas;
+        // 遍历选定的 consistent_rowsets，将每个行集的文件硬链接（或复制）到快照目录中
         for (auto& rs : consistent_rowsets) {
             if (rs->is_local()) {
                 // local rowset
@@ -593,6 +602,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
         new_tablet_meta->revise_rs_metas(std::move(rs_metas));
         if (ref_tablet->keys_type() == UNIQUE_KEYS &&
             ref_tablet->enable_unique_key_merge_on_write()) {
+            // 如果表是 UNIQUE_KEYS 类型且启用了写入时合并（Merge-on-Write），则生成当前版本的删除位图快照
             new_tablet_meta->revise_delete_bitmap_unlocked(delete_bitmap_snapshot);
         }
 
@@ -616,7 +626,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
         }
 
     } while (false);
-
+    // 当前只有克隆逻辑才会设置 is_copy_binlog 为 true
     // link all binlog files to snapshot path
     do {
         if (!res.ok()) {
@@ -626,12 +636,15 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
         if (!is_copy_binlog) {
             break;
         }
-
+        // 当请求中指定需要复制 Binlog（is_copy_binlog=true）时，代码会尝试将与选定行集相关的 Binlog 文件复制到快照目录
         RowsetBinlogMetasPB rowset_binlog_metas_pb;
+        // 遍历之前选定的行集 consistent_rowsets，逐一获取每个行集对应的 Binlog 元数据
         for (auto& rs : consistent_rowsets) {
+            // 如果行集不是本地的（如冷数据），直接跳过。
             if (!rs->is_local()) {
                 continue;
             }
+            // 调用 get_rowset_binlog_metas 方法获取指定版本的 Binlog 元数据，并存储到 rowset_binlog_metas_pb 中
             res = ref_tablet->get_rowset_binlog_metas(rs->version(), &rowset_binlog_metas_pb);
             if (!res.ok()) {
                 break;
@@ -644,6 +657,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
         // write to pb file
         auto rowset_binlog_metas_pb_filename =
                 fmt::format("{}/rowset_binlog_metas.pb", schema_full_path);
+        // 将 rowset_binlog_metas_pb 序列化为 Protocol Buffer 格式，并写入到快照路径下的文件 rowset_binlog_metas.pb
         res = write_pb(rowset_binlog_metas_pb_filename, rowset_binlog_metas_pb);
         if (!res.ok()) {
             break;
@@ -651,6 +665,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
 
         for (const auto& rowset_binlog_meta : rowset_binlog_metas_pb.rowset_binlog_metas()) {
             std::string segment_file_path;
+            // 获取 Binlog 文件的段数（num_segments）和行集的 ID（rowset_id）
             auto num_segments = rowset_binlog_meta.num_segments();
             std::string_view rowset_id = rowset_binlog_meta.rowset_id();
 
@@ -667,6 +682,8 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
             tablet_schema.init_from_pb(tablet_schema_pb);
 
             std::vector<string> linked_success_files;
+            // 使用 Defer 机制定义回滚逻辑：如果在 Binlog 文件处理流程中发生错误，删除所有已成功链接的文件
+            // 回滚逻辑在退出作用域时自动执行
             Defer remove_linked_files {[&]() { // clear linked files if errors happen
                 if (!res.ok()) {
                     LOG(WARNING) << "will delete linked success files due to error " << res;
@@ -686,7 +703,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
                 segment_file_path = ref_tablet->get_segment_filepath(rowset_id, segment_index);
                 auto snapshot_segment_file_path =
                         fmt::format("{}/{}_{}.binlog", schema_full_path, rowset_id, segment_index);
-
+                // 将每个段的原始路径（segment_file_path）链接到快照路径中对应的目标路径（snapshot_segment_file_path）
                 res = io::global_local_filesystem()->link_file(segment_file_path,
                                                                snapshot_segment_file_path);
                 if (!res.ok()) {
@@ -695,7 +712,8 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
                     break;
                 }
                 linked_success_files.push_back(snapshot_segment_file_path);
-
+                //  链接 Binlog 索引文件
+                // 根据 tablet_schema 中定义的索引存储格式（get_inverted_index_storage_format），选择不同的方法获取索引文件路径
                 if (tablet_schema.get_inverted_index_storage_format() ==
                     InvertedIndexStorageFormatPB::V1) {
                     for (const auto& index : tablet_schema.inverted_indexes()) {
@@ -743,11 +761,10 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
             }
         }
     } while (false);
-
     if (!res.ok()) {
         LOG(WARNING) << "fail to make snapshot, try to delete the snapshot path. path="
                      << snapshot_id_path.c_str();
-
+        // 如果整个快照生成流程失败，检查快照路径是否存在，若存在则删除整个快照目录
         bool exists = true;
         RETURN_IF_ERROR(io::global_local_filesystem()->exists(snapshot_id_path, &exists));
         if (exists) {
@@ -755,6 +772,7 @@ Status SnapshotManager::_create_snapshot_files(const TabletSharedPtr& ref_tablet
             RETURN_IF_ERROR(io::global_local_filesystem()->delete_directory(snapshot_id_path));
         }
     } else {
+        // 如果所有操作成功，将生成的快照路径赋值给输出参数 snapshot_path
         *snapshot_path = snapshot_id;
     }
 
