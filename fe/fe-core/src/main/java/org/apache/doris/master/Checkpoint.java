@@ -131,7 +131,9 @@ public class Checkpoint extends MasterDaemon {
         boolean exceptionCaught = false;
         String latestImageFilePath = null;
         try {
+            // 从上一个image回放临时env的元数据
             env.loadImage(imageDir);
+            // 临时env的元数据重放到checkPointVersion
             env.replayJournal(checkPointVersion);
             if (env.getReplayedJournalId() != checkPointVersion) {
                 throw new CheckpointException(
@@ -139,10 +141,12 @@ public class Checkpoint extends MasterDaemon {
                                 checkPointVersion, env.getReplayedJournalId()));
             }
             env.postProcessAfterMetadataReplayed(false);
+            // 从内存中回放数据到image
             latestImageFilePath = env.saveImage();
             replayedJournalId = env.getReplayedJournalId();
 
             // destroy checkpoint catalog, reclaim memory
+            // 新的image生成后，就释放env内存
             env = null;
             Env.destroyCheckpoint();
             destroyStaticFieldForCkpt();
@@ -234,15 +238,21 @@ public class Checkpoint extends MasterDaemon {
 
         // Delete old journals
         // only do this when the new image succeed in pushing to other nodes
+        // 只有当所有节点都成功接收到最新的元数据快照（Image File）时，才允许清理 Edit Log
         if (successPushed == otherNodesCount) {
             try {
+                // minOtherNodesJournalId：记录所有非 Master 节点中，当前回放的最小 Journal ID
+                // 清理日志时，不能删除超过这个最小值的日志，否则落后的节点无法获取缺失的日志，并导致同步失败
                 long minOtherNodesJournalId = Long.MAX_VALUE;
                 // Actually, storage.getLatestValidatedImageSeq returns number before this
                 // checkpoint.
+                // 获取当前存储中最新的已验证镜像版本（latestValidatedImageSeq）
+                // 这是一个安全的起点，表示在当前 Checkpoint 之前的所有日志都可以删除
                 long deleteVersion = storage.getLatestValidatedImageSeq();
                 if (successPushed > 0) {
                     for (Frontend fe : allFrontends) {
                         String host = fe.getHost();
+                        // 遍历所有 Frontend 节点（allFrontends），跳过 Master 节点。
                         if (host.equals(Env.getServingEnv().getMasterHost())) {
                             // skip master itself
                             continue;
@@ -257,12 +267,14 @@ public class Checkpoint extends MasterDaemon {
                              * any non-master node's current replayed journal id. otherwise,
                              * this lagging node can never get the deleted journal.
                              */
+                            // 通过 HTTP 请求非 Master 节点的 /journal_id 接口，获取它的当前回放的 Journal ID
                             idURL = "http://" + NetUtils.getHostPortInAccessibleFormat(host, port) + "/journal_id";
                             conn = HttpURLUtil.getConnectionWithNodeIdent(idURL);
                             conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
                             conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
                             String idString = conn.getHeaderField("id");
                             long id = Long.parseLong(idString);
+                            // 如果某个节点的回放进度落后，则 minOtherNodesJournalId 会更新为该节点的 ID. 这样可以确保清理日志时不会影响落后节点的同步.
                             if (minOtherNodesJournalId > id) {
                                 minOtherNodesJournalId = id;
                             }
@@ -275,6 +287,11 @@ public class Checkpoint extends MasterDaemon {
                             }
                         }
                     }
+                    /*
+                      deleteVersion 的最终值取：
+                            所有非 Master 节点中最小的回放 Journal ID（minOtherNodesJournalId）。确保清理的日志不会影响任何节点的日志回放
+                            当前存储中最新的已验证镜像版本（storage.getLatestValidatedImageSeq()）。防止删除比镜像版本更新的日志
+                     */
                     deleteVersion = Math.min(minOtherNodesJournalId, deleteVersion);
                 }
 
