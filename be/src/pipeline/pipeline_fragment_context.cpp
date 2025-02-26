@@ -227,6 +227,7 @@ PipelinePtr PipelineFragmentContext::add_pipeline(PipelinePtr parent, int idx) {
     return pipeline;
 }
 
+//构建执行计划
 Status PipelineFragmentContext::prepare(const doris::TPipelineFragmentParams& request,
                                         ThreadPool* thread_pool) {
     if (_prepared) {
