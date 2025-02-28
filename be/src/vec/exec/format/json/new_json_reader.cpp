@@ -479,7 +479,7 @@ Status NewJsonReader::_vhandle_simple_json(RuntimeState* /*state*/, Block& block
             }
             RETURN_IF_ERROR(st);
             if (*is_empty_row) {
-                LOG(INFO) << "_total_rows:" << block.rows();
+                LOG(INFO) << "_total_rows: " << block.rows();
                 return Status::OK();
             }
             _name_map.clear();
