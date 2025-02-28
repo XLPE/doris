@@ -603,6 +603,7 @@ Status NewJsonReader::_parse_json(bool* is_empty_row, bool* eof) {
 
     // read all data, then return
     if (size == 0 || *eof) {
+        LOG(INFO) << "碰到是空的情况了！！！" << print_id(_state->query_id());
         *is_empty_row = true;
         return Status::OK();
     }
