@@ -349,111 +349,179 @@ Status PipelineFragmentContext::prepare(const doris::TPipelineFragmentParams& re
     return Status::OK();
 }
 
+/**
+ * @brief 构建管道任务并初始化本地状态
+ *
+ * 此函数负责根据请求参数构建管道任务，并为每个任务初始化本地状态。它会为每个管道实例创建运行时状态，
+ * 并将任务添加到相应的任务列表中。同时，它会构建任务之间的依赖关系图（DAG），并准备每个任务。
+ * 如果实例并行度足够大，会使用多线程并行准备任务。
+ *
+ * @param request 包含管道片段参数的请求
+ * @param thread_pool 用于并行准备任务的线程池
+ * @return Status 如果构建和准备任务成功，返回 Status::OK()；否则返回错误状态
+ */
 Status PipelineFragmentContext::_build_pipeline_tasks(const doris::TPipelineFragmentParams& request,
                                                       ThreadPool* thread_pool) {
+    // 初始化总任务数为 0
     _total_tasks = 0;
+    // 获取请求中本地参数的数量，作为目标大小
     const auto target_size = request.local_params.size();
+    // 调整任务列表的大小以匹配目标大小
     _tasks.resize(target_size);
+    // 调整片段实例 ID 列表的大小以匹配目标大小
     _fragment_instance_ids.resize(target_size);
+    // 调整运行时过滤器状态列表的大小以匹配目标大小
     _runtime_filter_states.resize(target_size);
+    // 调整任务运行时状态列表的大小以匹配管道数量
     _task_runtime_states.resize(_pipelines.size());
+    // 遍历所有管道
     for (size_t pip_idx = 0; pip_idx < _pipelines.size(); pip_idx++) {
+        // 调整每个管道的任务运行时状态列表的大小以匹配管道的任务数量
         _task_runtime_states[pip_idx].resize(_pipelines[pip_idx]->num_tasks());
+        // 将管道 ID 映射到管道指针
         _pip_id_to_pipeline[_pipelines[pip_idx]->id()] = _pipelines[pip_idx].get();
     }
+    // 为每个管道构建运行时配置文件
     auto pipeline_id_to_profile = _runtime_state->build_pipeline_profile(_pipelines.size());
 
+    // 定义一个 lambda 函数，用于准备和提交任务
     auto pre_and_submit = [&](int i, PipelineFragmentContext* ctx) {
+        // 获取当前实例的本地参数
         const auto& local_params = request.local_params[i];
+        // 获取当前实例的片段实例 ID
         auto fragment_instance_id = local_params.fragment_instance_id;
+        // 将当前实例的片段实例 ID 存储到片段实例 ID 列表中
         _fragment_instance_ids[i] = fragment_instance_id;
 
+        // 创建运行时过滤器参数上下文
         _runtime_filter_states[i] = RuntimeFilterParamsContext::create(_query_ctx.get());
+        // 创建运行时过滤器管理器
         std::unique_ptr<RuntimeFilterMgr> runtime_filter_mgr = std::make_unique<RuntimeFilterMgr>(
                 request.query_id, _runtime_filter_states[i], _query_ctx->query_mem_tracker, false);
+        // 定义一个映射，用于将管道 ID 映射到管道任务指针
         std::map<PipelineId, PipelineTask*> pipeline_id_to_task;
+        // 定义一个 lambda 函数，用于获取本地交换状态
         auto get_local_exchange_state = [&](PipelinePtr pipeline)
                 -> std::map<int, std::pair<std::shared_ptr<LocalExchangeSharedState>,
                                            std::shared_ptr<Dependency>>> {
+            // 定义一个映射，用于存储本地交换状态
             std::map<int, std::pair<std::shared_ptr<LocalExchangeSharedState>,
                                     std::shared_ptr<Dependency>>>
                     le_state_map;
+            // 获取管道的源操作符 ID
             auto source_id = pipeline->operators().front()->operator_id();
+            // 如果在操作符 ID 到本地交换状态的映射中找到源操作符 ID
             if (auto iter = _op_id_to_le_state.find(source_id); iter != _op_id_to_le_state.end()) {
+                // 将源操作符的本地交换状态插入到本地交换状态映射中
                 le_state_map.insert({source_id, iter->second});
             }
+            // 遍历管道的接收器的目标操作符 ID
             for (auto sink_to_source_id : pipeline->sink()->dests_id()) {
+                // 如果在操作符 ID 到本地交换状态的映射中找到目标操作符 ID
                 if (auto iter = _op_id_to_le_state.find(sink_to_source_id);
                     iter != _op_id_to_le_state.end()) {
+                    // 将目标操作符的本地交换状态插入到本地交换状态映射中
                     le_state_map.insert({sink_to_source_id, iter->second});
                 }
             }
+            // 返回本地交换状态映射
             return le_state_map;
         };
 
+        // 遍历所有管道
         for (size_t pip_idx = 0; pip_idx < _pipelines.size(); pip_idx++) {
+            // 获取当前管道
             auto& pipeline = _pipelines[pip_idx];
+            // 如果管道的任务数量大于 1 或者是第一个实例
             if (pipeline->num_tasks() > 1 || i == 0) {
+                // 检查任务运行时状态是否为空
                 DCHECK(_task_runtime_states[pip_idx][i] == nullptr)
                         << print_id(_task_runtime_states[pip_idx][i]->fragment_instance_id()) << " "
                         << pipeline->debug_string();
+                // 创建当前任务的运行时状态
                 _task_runtime_states[pip_idx][i] = RuntimeState::create_unique(
                         this, local_params.fragment_instance_id, request.query_id,
                         request.fragment_id, request.query_options, _query_ctx->query_globals,
                         _exec_env, _query_ctx.get());
+                // 获取当前任务的运行时状态
                 auto& task_runtime_state = _task_runtime_states[pip_idx][i];
+                // 设置运行时过滤器状态的运行时状态
                 _runtime_filter_states[i]->set_state(task_runtime_state.get());
                 {
-                    // Initialize runtime state for this task
+                    // 初始化当前任务的运行时状态
+                    // 设置查询内存跟踪器
                     task_runtime_state->set_query_mem_tracker(_query_ctx->query_mem_tracker);
-
+                    // 设置任务执行上下文
                     task_runtime_state->set_task_execution_context(shared_from_this());
+                    // 设置后端编号
                     task_runtime_state->set_be_number(local_params.backend_num);
 
+                    // 如果请求中包含后端 ID，则设置后端 ID
                     if (request.__isset.backend_id) {
                         task_runtime_state->set_backend_id(request.backend_id);
                     }
+                    // 如果请求中包含导入标签，则设置导入标签
                     if (request.__isset.import_label) {
                         task_runtime_state->set_import_label(request.import_label);
                     }
+                    // 如果请求中包含数据库名称，则设置数据库名称
                     if (request.__isset.db_name) {
                         task_runtime_state->set_db_name(request.db_name);
                     }
+                    // 如果请求中包含加载作业 ID，则设置加载作业 ID
                     if (request.__isset.load_job_id) {
                         task_runtime_state->set_load_job_id(request.load_job_id);
                     }
+                    // 如果请求中包含 WAL ID，则设置 WAL ID
                     if (request.__isset.wal_id) {
                         task_runtime_state->set_wal_id(request.wal_id);
                     }
 
+                    // 设置描述符表
                     task_runtime_state->set_desc_tbl(_desc_tbl);
+                    // 设置每个片段实例的索引
                     task_runtime_state->set_per_fragment_instance_idx(local_params.sender_id);
+                    // 设置每个片段实例的数量
                     task_runtime_state->set_num_per_fragment_instances(request.num_senders);
+                    // 调整操作符 ID 到本地状态的映射大小
                     task_runtime_state->resize_op_id_to_local_state(max_operator_id());
+                    // 设置最大操作符 ID
                     task_runtime_state->set_max_operator_id(max_operator_id());
+                    // 设置每个节点的加载流数量
                     task_runtime_state->set_load_stream_per_node(request.load_stream_per_node);
+                    // 设置总加载流数量
                     task_runtime_state->set_total_load_streams(request.total_load_streams);
+                    // 设置本地接收器的数量
                     task_runtime_state->set_num_local_sink(request.num_local_sink);
 
+                    // 设置运行时过滤器管理器
                     task_runtime_state->set_runtime_filter_mgr(runtime_filter_mgr.get());
                 }
+                // 获取当前任务的 ID
                 auto cur_task_id = _total_tasks++;
+                // 设置当前任务的 ID
                 task_runtime_state->set_task_id(cur_task_id);
+                // 设置当前任务的数量
                 task_runtime_state->set_task_num(pipeline->num_tasks());
+                // 创建当前任务
                 auto task = std::make_unique<PipelineTask>(pipeline, cur_task_id,
                                                            task_runtime_state.get(), this,
                                                            pipeline_id_to_profile[pip_idx].get(),
                                                            get_local_exchange_state(pipeline), i);
+                // 增加管道的已创建任务数量
                 pipeline->incr_created_tasks(i, task.get());
+                // 设置任务的运行时状态
                 task_runtime_state->set_task(task.get());
+                // 将管道 ID 映射到任务指针
                 pipeline_id_to_task.insert({pipeline->id(), task.get()});
+                // 将任务添加到任务列表中
                 _tasks[i].emplace_back(std::move(task));
             }
         }
 
         /**
-         * Build DAG for pipeline tasks.
-         * For example, we have
+         * 构建管道任务的有向无环图（DAG）
+         * 例如，我们有以下结构：
          *
          *   ExchangeSink (Pipeline1)     JoinBuildSink (Pipeline2)
          *            \                      /
@@ -461,27 +529,37 @@ Status PipelineFragmentContext::_build_pipeline_tasks(const doris::TPipelineFrag
          *                 \                          /
          *               JoinProbeOperator2 (Pipeline1)
          *
-         * In this fragment, we have three pipelines and pipeline 1 depends on pipeline 2 and pipeline 3.
-         * To build this DAG, `_dag` manage dependencies between pipelines by pipeline ID and
-         * `pipeline_id_to_task` is used to find the task by a unique pipeline ID.
+         * 在这个片段中，我们有三个管道，并且管道 1 依赖于管道 2 和管道 3。
+         * 为了构建这个 DAG，`_dag` 通过管道 ID 管理管道之间的依赖关系，
+         * 而 `pipeline_id_to_task` 用于通过唯一的管道 ID 查找任务。
          *
-         * Finally, we have two upstream dependencies in Pipeline1 corresponding to JoinProbeOperator1
-         * and JoinProbeOperator2.
+         * 最后，在 Pipeline1 中，我们有两个上游依赖，分别对应于 JoinProbeOperator1 和 JoinProbeOperator2。
          */
+        // 遍历所有管道
         for (auto& _pipeline : _pipelines) {
+            // 如果管道 ID 存在于 pipeline_id_to_task 映射中
             if (pipeline_id_to_task.contains(_pipeline->id())) {
+                // 获取当前管道的任务指针
                 auto* task = pipeline_id_to_task[_pipeline->id()];
+                // 检查任务指针是否为空
                 DCHECK(task != nullptr);
 
-                // If this task has upstream dependency, then inject it into this task.
+                // 如果当前任务有上游依赖，则将其注入到当前任务中
                 if (_dag.find(_pipeline->id()) != _dag.end()) {
+                    // 获取当前管道的依赖列表
                     auto& deps = _dag[_pipeline->id()];
+                    // 遍历依赖列表
                     for (auto& dep : deps) {
+                        // 如果依赖的管道 ID 存在于 pipeline_id_to_task 映射中
                         if (pipeline_id_to_task.contains(dep)) {
+                            // 获取依赖管道的接收器共享状态
                             auto ss = pipeline_id_to_task[dep]->get_sink_shared_state();
+                            // 如果共享状态存在
                             if (ss) {
+                                // 将共享状态注入到当前任务中
                                 task->inject_shared_state(ss);
                             } else {
+                                // 将当前任务的源共享状态注入到依赖管道的任务中
                                 pipeline_id_to_task[dep]->inject_shared_state(
                                         task->get_source_shared_state());
                             }
@@ -490,56 +568,84 @@ Status PipelineFragmentContext::_build_pipeline_tasks(const doris::TPipelineFrag
                 }
             }
         }
+        // 遍历所有管道
         for (size_t pip_idx = 0; pip_idx < _pipelines.size(); pip_idx++) {
+            // 如果管道 ID 存在于 pipeline_id_to_task 映射中
             if (pipeline_id_to_task.contains(_pipelines[pip_idx]->id())) {
+                // 获取当前管道的任务指针
                 auto* task = pipeline_id_to_task[_pipelines[pip_idx]->id()];
+                // 检查管道配置文件指针是否为空
                 DCHECK(pipeline_id_to_profile[pip_idx]);
+                // 准备当前任务
                 RETURN_IF_ERROR(task->prepare(local_params, request.fragment.output_sink,
                                               _query_ctx.get()));
             }
         }
         {
+            // 加锁以确保线程安全
             std::lock_guard<std::mutex> l(_state_map_lock);
+            // 将运行时过滤器管理器存储到映射中
             _runtime_filter_mgr_map[fragment_instance_id] = std::move(runtime_filter_mgr);
         }
+        // 返回成功状态
         return Status::OK();
     };
+    // 如果目标大小大于 1 且实例并行度足够大
     if (target_size > 1 &&
         (_runtime_state->query_options().__isset.parallel_prepare_threshold &&
          target_size > _runtime_state->query_options().parallel_prepare_threshold)) {
-        // If instances parallelism is big enough ( > parallel_prepare_threshold), we will prepare all tasks by multi-threads
+        // 使用多线程并行准备所有任务
         std::vector<Status> prepare_status(target_size);
         std::mutex m;
         std::condition_variable cv;
         int prepare_done = 0;
+        // 遍历所有实例
         for (size_t i = 0; i < target_size; i++) {
+            // 提交任务到线程池
             RETURN_IF_ERROR(thread_pool->submit_func([&, i]() {
+                // 附加任务到查询上下文
                 SCOPED_ATTACH_TASK(_query_ctx.get());
+                // 准备和提交任务
                 prepare_status[i] = pre_and_submit(i, this);
+                // 加锁以确保线程安全
                 std::unique_lock<std::mutex> lock(m);
+                // 增加已完成任务的数量
                 prepare_done++;
+                // 如果所有任务都已完成
                 if (prepare_done == target_size) {
+                    // 通知等待的线程
                     cv.notify_one();
                 }
             }));
         }
+        // 加锁以确保线程安全
         std::unique_lock<std::mutex> lock(m);
+        // 如果还有任务未完成
         if (prepare_done != target_size) {
+            // 等待所有任务完成
             cv.wait(lock);
+            // 检查所有任务的状态
             for (size_t i = 0; i < target_size; i++) {
+                // 如果有任务失败
                 if (!prepare_status[i].ok()) {
+                    // 返回失败状态
                     return prepare_status[i];
                 }
             }
         }
     } else {
+        // 单线程准备所有任务
         for (size_t i = 0; i < target_size; i++) {
+            // 准备和提交任务
             RETURN_IF_ERROR(pre_and_submit(i, this));
         }
     }
+    // 清空管道父映射
     _pipeline_parent_map.clear();
+    // 清空操作符 ID 到本地交换状态的映射
     _op_id_to_le_state.clear();
 
+    // 返回成功状态
     return Status::OK();
 }
 

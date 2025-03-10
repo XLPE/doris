@@ -255,46 +255,73 @@ Status MemTable::_put_into_output(vectorized::Block& in_block) {
                                           row_pos_vec.data() + in_block.rows());
 }
 
+/**
+ * @brief 对 MemTable 中的行进行排序，并合并新旧行。
+ *
+ * 该方法首先对新插入的行进行排序，然后将新行与旧行合并，同时计算具有相同键的行的数量。
+ *
+ * @return 具有相同键的行的数量。
+ */
 size_t MemTable::_sort() {
+    // 记录排序操作的耗时
     SCOPED_RAW_TIMER(&_stat.sort_ns);
+    // 增加排序次数统计
     _stat.sort_times++;
+    // 初始化具有相同键的行的数量
     size_t same_keys_num = 0;
-    // sort new rows
+    // 创建一个 Tie 对象，用于指定需要排序的新行的范围
     Tie tie = Tie(_last_sorted_pos, _row_in_blocks.size());
+    // 遍历所有键列
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
+        // 定义一个比较函数，用于比较两行在指定键列上的值
         auto cmp = [&](const RowInBlock* lhs, const RowInBlock* rhs) -> int {
             return _input_mutable_block.compare_one_column(lhs->_row_pos, rhs->_row_pos, i, -1);
         };
+        // 对指定范围内的行按当前键列进行排序
         _sort_one_column(_row_in_blocks, tie, cmp);
     }
+    // 判断键类型是否为 DUP_KEYS
     bool is_dup = (_keys_type == KeysType::DUP_KEYS);
-    // sort extra round by _row_pos to make the sort stable
+    // 对排序后的行进行额外的排序，以确保排序的稳定性
     auto iter = tie.iter();
     while (iter.next()) {
+        // 使用 pdqsort 对指定范围内的行进行排序
         pdqsort(std::next(_row_in_blocks.begin(), iter.left()),
                 std::next(_row_in_blocks.begin(), iter.right()),
                 [&is_dup](const RowInBlock* lhs, const RowInBlock* rhs) -> bool {
+                    // 根据键类型决定排序顺序
                     return is_dup ? lhs->_row_pos > rhs->_row_pos : lhs->_row_pos < rhs->_row_pos;
                 });
+        // 累加具有相同键的行的数量
         same_keys_num += iter.right() - iter.left();
     }
-    // merge new rows and old rows
+    // 设置行比较器的块为 _input_mutable_block
     _vec_row_comparator->set_block(&_input_mutable_block);
+    // 定义一个合并比较函数，用于合并新旧行
     auto cmp_func = [this, is_dup, &same_keys_num](const RowInBlock* l,
                                                    const RowInBlock* r) -> bool {
+        // 比较两行的键值
         auto value = (*(this->_vec_row_comparator))(l, r);
         if (value == 0) {
+            // 如果键值相同，累加相同键的行的数量
             same_keys_num++;
+            // 根据键类型决定排序顺序
             return is_dup ? l->_row_pos > r->_row_pos : l->_row_pos < r->_row_pos;
         } else {
+            // 如果键值不同，按比较结果排序
             return value < 0;
         }
     };
+    // 获取新行的起始迭代器
     auto new_row_it = std::next(_row_in_blocks.begin(), _last_sorted_pos);
+    // 使用 std::inplace_merge 合并新旧行
     std::inplace_merge(_row_in_blocks.begin(), new_row_it, _row_in_blocks.end(), cmp_func);
+    // 更新最后排序位置为当前行的数量
     _last_sorted_pos = _row_in_blocks.size();
+    // 返回具有相同键的行的数量
     return same_keys_num;
 }
+
 
 Status MemTable::_sort_by_cluster_keys() {
     SCOPED_RAW_TIMER(&_stat.sort_ns);
@@ -414,64 +441,103 @@ void MemTable::_finalize_one_row(RowInBlock* row,
     }
 }
 
+/**
+ * @brief 对 MemTable 中的数据进行聚合操作
+ *
+ * 该方法会对 MemTable 中的行进行排序，并根据行的键值进行聚合操作。
+ * 聚合操作会更新相同键值行的聚合状态，并将结果存储在输出块中。
+ *
+ * @tparam is_final 是否为最终聚合阶段
+ */
 template <bool is_final>
 void MemTable::_aggregate() {
+    // 记录聚合操作的耗时
     SCOPED_RAW_TIMER(&_stat.agg_ns);
+    // 增加聚合次数统计
     _stat.agg_times++;
+    // 将输入可变块转换为不可变块
     vectorized::Block in_block = _input_mutable_block.to_block();
+    // 从不可变块创建一个新的可变块
     vectorized::MutableBlock mutable_block =
             vectorized::MutableBlock::build_mutable_block(&in_block);
+    // 设置行比较器使用的块为新的可变块
     _vec_row_comparator->set_block(&mutable_block);
+    // 获取不可变块中列的类型和名称信息
     auto& block_data = in_block.get_columns_with_type_and_name();
+    // 临时存储行对象的向量
     std::vector<RowInBlock*> temp_row_in_blocks;
+    // 预先分配足够的空间以存储行对象
     temp_row_in_blocks.reserve(_last_sorted_pos);
+    // 指向先前处理的行对象的指针
     RowInBlock* prev_row = nullptr;
+    // 当前行的位置
     int row_pos = -1;
-    //only init agg if needed
+    // 仅在需要时初始化聚合状态
     for (int i = 0; i < _row_in_blocks.size(); i++) {
+        // 如果临时行向量不为空，并且当前行与前一行的键值相同
         if (!temp_row_in_blocks.empty() &&
             (*_vec_row_comparator)(prev_row, _row_in_blocks[i]) == 0) {
+            // 如果前一行还没有初始化聚合状态
             if (!prev_row->has_init_agg()) {
+                // 为前一行分配聚合状态所需的内存
                 prev_row->init_agg_places(
                         _arena->aligned_alloc(_total_size_of_aggregate_states, 16),
                         _offsets_of_aggregate_states.data());
+                // 遍历所有非键列
                 for (auto cid = _tablet_schema->num_key_columns(); cid < _num_columns; cid++) {
+                    // 获取当前列的指针
                     auto col_ptr = mutable_block.mutable_columns()[cid].get();
+                    // 获取前一行的聚合状态存储位置
                     auto data = prev_row->agg_places(cid);
+                    // 创建聚合状态
                     _agg_functions[cid]->create(data);
+                    // 将前一行的数据添加到聚合状态中
                     _agg_functions[cid]->add(
                             data, const_cast<const doris::vectorized::IColumn**>(&col_ptr),
                             prev_row->_row_pos, _arena.get());
                 }
             }
+            // 增加合并行的统计
             _stat.merged_rows++;
+            // 聚合当前行和前一行的数据
             _aggregate_two_row_in_block(mutable_block, _row_in_blocks[i], prev_row);
         } else {
+            // 更新前一行指针为当前行
             prev_row = _row_in_blocks[i];
+            // 如果临时行向量不为空
             if (!temp_row_in_blocks.empty()) {
-                // no more rows to merge for prev row, finalize it
+                // 对前一行进行最终处理
                 _finalize_one_row<is_final>(temp_row_in_blocks.back(), block_data, row_pos);
             }
+            // 将当前行添加到临时行向量中
             temp_row_in_blocks.push_back(prev_row);
+            // 增加行位置
             row_pos++;
         }
     }
+    // 如果临时行向量不为空
     if (!temp_row_in_blocks.empty()) {
-        // finalize the last low
+        // 对最后一行进行最终处理
         _finalize_one_row<is_final>(temp_row_in_blocks.back(), block_data, row_pos);
     }
+    // 如果不是最终聚合阶段
     if constexpr (!is_final) {
-        // if is not final, we collect the agg results to input_block and then continue to insert
+        // 将输出可变块的数据交换到输入可变块
         _input_mutable_block.swap(_output_mutable_block);
-        //TODO(weixang):opt here.
+        // 创建一个空的不可变块
         std::unique_ptr<vectorized::Block> empty_input_block = in_block.create_same_struct_block(0);
+        // 从空的不可变块创建一个新的可变块
         _output_mutable_block =
                 vectorized::MutableBlock::build_mutable_block(empty_input_block.get());
+        // 清空输出可变块的列数据
         _output_mutable_block.clear_column_data();
+        // 更新行对象向量为临时行向量
         _row_in_blocks = temp_row_in_blocks;
+        // 更新最后排序位置为当前行的数量
         _last_sorted_pos = _row_in_blocks.size();
     }
 }
+
 
 void MemTable::shrink_memtable_by_agg() {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker);

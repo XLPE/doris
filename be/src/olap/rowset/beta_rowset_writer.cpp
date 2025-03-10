@@ -310,36 +310,63 @@ Status BaseBetaRowsetWriter::add_block(const vectorized::Block* block) {
     return _segment_creator.add_block(block);
 }
 
+/**
+ * @brief 为指定段 ID 生成删除位图
+ * 
+ * 此函数用于生成指定段 ID 的删除位图。它首先检查是否需要生成删除位图，
+ * 如果需要，则构建一个临时行集，加载该段的所有片段，获取指定的行集，
+ * 然后计算删除位图。最后，记录生成删除位图的相关信息。
+ * 
+ * @param segment_id 要生成删除位图的段 ID
+ * @return Status 返回操作的状态
+ */
 Status BaseBetaRowsetWriter::_generate_delete_bitmap(int32_t segment_id) {
+    // 记录生成删除位图的时间
     SCOPED_RAW_TIMER(&_delete_bitmap_ns);
+    // 检查是否需要生成删除位图
     if (!_context.tablet->enable_unique_key_merge_on_write() ||
         (_context.partial_update_info && _context.partial_update_info->is_partial_update)) {
+        // 如果不需要，直接返回成功状态
         return Status::OK();
     }
+    // 定义一个智能指针，用于存储临时行集
     RowsetSharedPtr rowset_ptr;
+    // 构建临时行集
     RETURN_IF_ERROR(_build_tmp(rowset_ptr));
+    // 将行集指针转换为 BetaRowset 类型
     auto beta_rowset = reinterpret_cast<BetaRowset*>(rowset_ptr.get());
+    // 定义一个向量，用于存储段的所有片段
     std::vector<segment_v2::SegmentSharedPtr> segments;
+    // 加载指定段 ID 的所有片段
     RETURN_IF_ERROR(beta_rowset->load_segments(segment_id, segment_id + 1, &segments));
+    // 定义一个向量，用于存储指定的行集
     std::vector<RowsetSharedPtr> specified_rowsets;
     {
+        // 对表的元数据进行共享锁定
         std::shared_lock meta_rlock(_context.tablet->get_header_lock());
+        // 获取指定的行集
         specified_rowsets = _context.tablet->get_rowset_by_ids(&_context.mow_context->rowset_ids);
     }
+    // 定义一个计时器，用于记录计算删除位图的时间
     OlapStopWatch watch;
+    // 计算删除位图
     RETURN_IF_ERROR(BaseTablet::calc_delete_bitmap(
             _context.tablet, rowset_ptr, segments, specified_rowsets,
             _context.mow_context->delete_bitmap, _context.mow_context->max_version, nullptr));
+    // 计算所有片段的总行数
     size_t total_rows = std::accumulate(
             segments.begin(), segments.end(), 0,
             [](size_t sum, const segment_v2::SegmentSharedPtr& s) { return sum += s->num_rows(); });
+    // 记录生成删除位图的相关信息
     LOG(INFO) << "[Memtable Flush] construct delete bitmap tablet: " << _context.tablet->tablet_id()
               << ", rowset_ids: " << _context.mow_context->rowset_ids.size()
               << ", cur max_version: " << _context.mow_context->max_version
               << ", transaction_id: " << _context.mow_context->txn_id
               << ", cost: " << watch.get_elapse_time_us() << "(us), total rows: " << total_rows;
+    // 返回成功状态
     return Status::OK();
 }
+
 
 Status BetaRowsetWriter::_load_noncompacted_segment(segment_v2::SegmentSharedPtr& segment,
                                                     int32_t segment_id) {

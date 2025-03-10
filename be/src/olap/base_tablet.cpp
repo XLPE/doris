@@ -524,36 +524,59 @@ Status BaseTablet::lookup_row_key(const Slice& encoded_key, TabletSchema* latest
     return Status::Error<ErrorCode::KEY_NOT_FOUND>("can't find key in all rowsets");
 }
 
-// if user pass a token, then all calculation works will submit to a threadpool,
-// user can get all delete bitmaps from that token.
-// if `token` is nullptr, the calculation will run in local, and user can get the result
-// delete bitmap from `delete_bitmap` directly.
+/**
+ * @brief 计算删除位图
+ * 
+ * 此函数用于计算指定行集和段的删除位图。如果用户传入了 `token`，则所有计算任务将提交到线程池，
+ * 用户可以从该 `token` 获取所有删除位图；如果 `token` 为 `nullptr`，则计算将在本地运行，
+ * 用户可以直接从 `delete_bitmap` 获取结果。
+ * 
+ * @param tablet 指向 BaseTablet 的智能指针，代表要处理的表
+ * @param rowset 指向行集的智能指针
+ * @param segments 包含段的智能指针的向量
+ * @param specified_rowsets 包含指定行集的智能指针的向量
+ * @param delete_bitmap 指向删除位图的智能指针，用于存储计算结果
+ * @param end_version 结束版本号
+ * @param token 指向计算删除位图的令牌的指针，用于线程池任务提交
+ * @param rowset_writer 指向行集写入器的指针
+ * @return Status 返回操作的状态
+ */
 Status BaseTablet::calc_delete_bitmap(const BaseTabletSPtr& tablet, RowsetSharedPtr rowset,
                                       const std::vector<segment_v2::SegmentSharedPtr>& segments,
                                       const std::vector<RowsetSharedPtr>& specified_rowsets,
                                       DeleteBitmapPtr delete_bitmap, int64_t end_version,
                                       CalcDeleteBitmapToken* token, RowsetWriter* rowset_writer) {
+    // 获取当前行集的 ID
     auto rowset_id = rowset->rowset_id();
+    // 如果指定行集或段为空，则跳过删除位图的构建
     if (specified_rowsets.empty() || segments.empty()) {
         LOG(INFO) << "skip to construct delete bitmap tablet: " << tablet->tablet_id()
                   << " rowset: " << rowset_id;
         return Status::OK();
     }
 
+    // 创建一个计时器，用于记录计算删除位图的时间
     OlapStopWatch watch;
+    // 遍历所有段
     for (const auto& segment : segments) {
+        // 为当前段创建一个引用
         const auto& seg = segment;
+        // 如果传入了 token，则将计算任务提交到线程池
         if (token != nullptr) {
+            // 提交任务到线程池，并处理可能的错误
             RETURN_IF_ERROR(token->submit(tablet, rowset, seg, specified_rowsets, end_version,
                                           delete_bitmap, rowset_writer));
         } else {
+            // 如果没有传入 token，则在本地计算当前段的删除位图
             RETURN_IF_ERROR(tablet->calc_segment_delete_bitmap(
                     rowset, segment, specified_rowsets, delete_bitmap, end_version, rowset_writer));
         }
     }
 
+    // 计算完成，返回成功状态
     return Status::OK();
 }
+
 
 Status BaseTablet::calc_segment_delete_bitmap(RowsetSharedPtr rowset,
                                               const segment_v2::SegmentSharedPtr& seg,
