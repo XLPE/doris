@@ -2187,6 +2187,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         ctx.getSessionVariable().groupCommit = request.getGroupCommitMode();
         try {
+            // streamload的生成执行计划，该执行计划包含了副本信息
             HttpStreamParams httpStreamParams = initHttpStreamPlan(request, ctx);
             int loadStreamPerNode = 2;
             if (request.getStreamPerNode() > 0) {
