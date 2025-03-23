@@ -803,7 +803,7 @@ Status BetaRowsetWriter::_close_file_writers() {
 
 Status BetaRowsetWriter::build(RowsetSharedPtr& rowset) {
     RETURN_IF_ERROR(_close_file_writers());
-    LOG(WARNING) << "start build rowset, tablet:" << _context.tablet_id << "rowset:" << _context.rowset_id << "stack:\n" << get_stack_trace();
+    LOG(WARNING) << "start build rowset, tablet:" << _context.tablet_id << ",rowset:" << _context.rowset_id << ",stack:\n" << get_stack_trace();
     const auto total_segment_num = _num_segment - _segcompacted_point + 1 + _num_segcompacted;
     RETURN_NOT_OK_STATUS_WITH_WARN(_check_segment_number_limit(total_segment_num),
                                    "too many segments when build new rowset");
