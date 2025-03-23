@@ -54,6 +54,7 @@
 #include "util/debug_points.h"
 #include "util/slice.h"
 #include "util/time.h"
+#include "util/stack_util.h"
 #include "vec/columns/column.h"
 #include "vec/common/schema_util.h"
 #include "vec/core/block.h"
@@ -802,6 +803,7 @@ Status BetaRowsetWriter::_close_file_writers() {
 
 Status BetaRowsetWriter::build(RowsetSharedPtr& rowset) {
     RETURN_IF_ERROR(_close_file_writers());
+    LOG_WARNING("start build rowset, tablet:{},rowset:{},stack:\n{}",_context.tablet_id ,_context.rowset_id,get_stack_trace());
     const auto total_segment_num = _num_segment - _segcompacted_point + 1 + _num_segcompacted;
     RETURN_NOT_OK_STATUS_WITH_WARN(_check_segment_number_limit(total_segment_num),
                                    "too many segments when build new rowset");
