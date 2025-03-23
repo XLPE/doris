@@ -95,7 +95,7 @@ private:
                               uint32_t begin, uint32_t end);
     Status _do_compact_segments(SegCompactionCandidatesSharedPtr segments);
 
-private:
+public:
     //TODO(zhengyu): current impl depends heavily on the access to feilds of BetaRowsetWriter
     // Currently cloud storage engine doesn't need segcompaction
     BetaRowsetWriter* _writer = nullptr;
