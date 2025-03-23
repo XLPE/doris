@@ -53,8 +53,8 @@
 #include "runtime/thread_context.h"
 #include "util/debug_points.h"
 #include "util/slice.h"
-#include "util/time.h"
 #include "util/stack_util.h"
+#include "util/time.h"
 #include "vec/columns/column.h"
 #include "vec/common/schema_util.h"
 #include "vec/core/block.h"
@@ -592,6 +592,7 @@ Status BetaRowsetWriter::_segcompaction_if_necessary() {
     if (_is_doing_segcompaction.exchange(true)) {
         return status;
     }
+    LOG(WARNING) << "segcompaction is enabled,stack:\n" << get_stack_trace();
     if (_segcompaction_status.load() != OK) {
         status = Status::Error<SEGCOMPACTION_FAILED>(
                 "BetaRowsetWriter::_segcompaction_if_necessary meet invalid state, error code: {}",
@@ -719,6 +720,7 @@ Status BaseBetaRowsetWriter::flush_single_block(const vectorized::Block* block) 
 }
 
 Status BetaRowsetWriter::_wait_flying_segcompaction() {
+    LOG(WARNING) << "wait flying segcompaction,stack:\n" << get_stack_trace();
     std::unique_lock<std::mutex> l(_is_doing_segcompaction_lock);
     uint64_t begin_wait = GetCurrentTimeMicros();
     while (_is_doing_segcompaction) {
@@ -803,7 +805,9 @@ Status BetaRowsetWriter::_close_file_writers() {
 
 Status BetaRowsetWriter::build(RowsetSharedPtr& rowset) {
     RETURN_IF_ERROR(_close_file_writers());
-    LOG(WARNING) << "start build rowset, tablet:" << _context.tablet_id << ",rowset:" << _context.rowset_id << ",stack:\n" << get_stack_trace();
+    LOG(WARNING) << "start build rowset, tablet:" << _context.tablet_id
+                 << ",rowset:" << _context.rowset_id << ",stack:\n"
+                 << get_stack_trace();
     const auto total_segment_num = _num_segment - _segcompacted_point + 1 + _num_segcompacted;
     RETURN_NOT_OK_STATUS_WITH_WARN(_check_segment_number_limit(total_segment_num),
                                    "too many segments when build new rowset");
