@@ -167,6 +167,7 @@ Status hostname_to_ipv6(const std::string& host, std::string& ip) {
     char ipstr2[128];
     struct sockaddr_in6* sockaddr_ipv6;
 
+    size_t percent_pos = host.find('%');
     struct addrinfo *answer, hint;
     bzero(&hint, sizeof(hint));
     hint.ai_family = AF_INET6;
@@ -181,7 +182,7 @@ Status hostname_to_ipv6(const std::string& host, std::string& ip) {
 
     sockaddr_ipv6 = reinterpret_cast<struct sockaddr_in6*>(answer->ai_addr);
     inet_ntop(AF_INET6, &sockaddr_ipv6->sin6_addr, ipstr2, sizeof(ipstr2));
-    ip = ipstr2;
+    ip = percent_pos != std::string::npos ? fmt::format("{}{}", ipstr2, host.substr(percent_pos)) : ipstr2;
     fflush(NULL);
     freeaddrinfo(answer);
     return Status::OK();
