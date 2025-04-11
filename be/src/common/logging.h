@@ -55,20 +55,18 @@
 #define VLOG_LARGE_IS_ON VLOG_IS_ON(10)
 
 
-#define VLOG_LARGE_STREAM(stream, msg) \
+#define VLOG_LARGE_MSG(msg) \
     do { \
         if (VLOG_LARGE_IS_ON) { \
             std::ostringstream _log_stream; \
             _log_stream << msg; \
             const std::string& _log_msg = _log_stream.str(); \
-            constexpr size_t _chunk_size = 20000; \
+            constexpr size_t _chunk_size = google::LogMessage::kMaxLogMessageLen - 100; \
             for (size_t _i = 0; _i < _log_msg.size(); _i += _chunk_size) { \
-                stream << _log_msg.substr(_i, _chunk_size); \
+                VLOG_LARGE << _log_msg.substr(_i, _chunk_size); \
             } \
         } \
     } while (0)
-
-#define VLOG_LARGE_MSG(msg) VLOG_LARGE_STREAM(VLOG_LARGE, msg)
 
 /// Define a wrapper around DCHECK for strongly typed enums that print a useful error
 /// message on failure.
