@@ -159,14 +159,13 @@ Status HeartbeatServer::_heartbeat(const TMasterInfo& master_info) {
                 }
 
                 //step4: check if the IP of FQDN belongs to the current machine and update BackendOptions._s_localhost
-                auto compare_addr = [](const std::string& a, const std::string& b) {
-                    return a.substr(0, a.find('%')) == b.substr(0, b.find('%'));
-                };
-                bool set_new_localhost = std::any_of(hosts.begin(), hosts.end(), [&](const auto& addr) {
-                    return compare_addr(addr.get_host_address(), ip);
-                });
-                if (set_new_localhost) {
-                    BackendOptions::set_localhost(master_info.backend_ip);
+                bool set_new_localhost = false;
+                for (auto& addr : hosts) {
+                    if (addr.get_host_address() == ip) {
+                        BackendOptions::set_localhost(master_info.backend_ip);
+                        set_new_localhost = true;
+                        break;
+                    }
                 }
 
                 if (!set_new_localhost) {
