@@ -61,7 +61,7 @@
             std::ostringstream _log_stream; \
             _log_stream << msg; \
             const std::string& _log_msg = _log_stream.str(); \
-            const size_t _chunk_size = 1000000; \
+            constexpr size_t _chunk_size = 20000; \
             for (size_t _i = 0; _i < _log_msg.size(); _i += _chunk_size) { \
                 stream << _log_msg.substr(_i, _chunk_size); \
             } \
