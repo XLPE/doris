@@ -41,6 +41,7 @@
 #define VLOG_DEBUG VLOG(7)
 #define VLOG_NOTICE VLOG(3)
 #define VLOG_CRITICAL VLOG(1)
+#define VLOG_LARGE VLOG(10)
 
 #define VLOG_CONNECTION_IS_ON VLOG_IS_ON(1)
 #define VLOG_RPC_IS_ON VLOG_IS_ON(8)
@@ -51,6 +52,23 @@
 #define VLOG_DEBUG_IS_ON VLOG_IS_ON(7)
 #define VLOG_NOTICE_IS_ON VLOG_IS_ON(3)
 #define VLOG_CRITICAL_IS_ON VLOG_IS_ON(1)
+#define VLOG_LARGE_IS_ON VLOG_IS_ON(10)
+
+
+#define VLOG_LARGE_STREAM(stream, msg) \
+    do { \
+        if (VLOG_LARGE_IS_ON) { \
+            std::ostringstream _log_stream; \
+            _log_stream << msg; \
+            const std::string& _log_msg = _log_stream.str(); \
+            const size_t _chunk_size = 1000000; \
+            for (size_t _i = 0; _i < _log_msg.size(); _i += _chunk_size) { \
+                stream << _log_msg.substr(_i, _chunk_size); \
+            } \
+        } \
+    } while (0)
+
+#define VLOG_LARGE_MSG(msg) VLOG_LARGE_STREAM(VLOG_LARGE, msg)
 
 /// Define a wrapper around DCHECK for strongly typed enums that print a useful error
 /// message on failure.
