@@ -375,7 +375,7 @@ Status PipelineTask::execute(bool* eos) {
             _get_block_counter->update(1);
             auto status = _root->get_block_after_projects(_state, block, eos);
             LOG(INFO) << "query id:" << print_id(_state->query_id()) << ", status: " << status.ok() << "," << status.to_string()
-            << ",block size:" << block->rows() << ", eos: " << eos;
+            << ",block rows:" << block->rows() << ", eos: " << *eos;
             RETURN_IF_ERROR(status);
         }
 
