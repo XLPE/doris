@@ -123,7 +123,7 @@ void TaskScheduler::_do_work(size_t index) {
             // errors to downstream through exchange. So, here we needn't send_report.
             // fragment_ctx->send_report(true);
             LOG(INFO) << "Pipeline task canceled. query_id: "
-                      << fragment_ctx->get_query_ctx()->query_id()
+                      << print_id(fragment_ctx->get_query_ctx()->query_id())
                       << ",task:" << fragment_ctx->get_fragment_id();
             _close_task(task, fragment_ctx->get_query_ctx()->exec_status());
             continue;

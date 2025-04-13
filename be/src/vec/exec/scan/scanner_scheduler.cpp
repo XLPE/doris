@@ -250,6 +250,9 @@ void ScannerScheduler::_scanner_scan(std::shared_ptr<ScannerContext> ctx,
                 }
                 if (max_run_time_watch.elapsed_time() >
                     config::doris_scanner_max_run_time_ms * 1e6) {
+                    LOG(INFO) << "query id:" << print_id(state->query_id())
+                              << " scanner max run time exceeded, instance id:"
+                              << print_id(state->fragment_instance_id());
                     break;
                 }
                 BlockUPtr free_block = ctx->get_free_block(first_read);
