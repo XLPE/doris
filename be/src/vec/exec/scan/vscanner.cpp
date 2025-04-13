@@ -142,10 +142,12 @@ Status VScanner::get_block(RuntimeState* state, Block* block, bool* eof) {
     }
 
     if (state->is_cancelled()) {
+        LOG(INFO) << "query id:" << print_id(state->query_id()) << " cancelled";
         // TODO: Should return the specific ErrorStatus instead of just Cancelled.
         return Status::Cancelled("cancelled");
     }
     *eof = *eof || _should_stop;
+    LOG(INFO) << "query id:" << print_id(state->query_id()) << ",eof:" << *eof << ",_should_stop:" << _should_stop << ",_num_rows_read:" << _num_rows_read << ",_num_rows_return:" << _num_rows_return << ",_limit:" << _limit;
     // set eof to true if per scanner limit is reached
     // currently for query: ORDER BY key LIMIT n
     *eof = *eof || (_limit > 0 && _num_rows_return >= _limit);
