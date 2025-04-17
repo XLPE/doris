@@ -944,6 +944,15 @@ public class TypeCoercionUtils {
     }
 
     /**
+     * check if the right literal can be converted to the type of the left expression.
+     */
+    private static boolean isRightLiteralConvertible(Expression left, Expression right) {
+        return !(left instanceof Literal)
+                && (right instanceof Literal)
+                && canCastTo(right.getDataType(), left.getDataType());
+    }
+
+    /**
      * process comparison predicate type coercion.
      */
     public static Expression processComparisonPredicate(ComparisonPredicate comparisonPredicate) {
@@ -959,6 +968,16 @@ public class TypeCoercionUtils {
                 throw new AnalysisException("data type " + left.getDataType()
                         + " could not used in ComparisonPredicate " + comparisonPredicate.toSql());
             }
+            return comparisonPredicate.withChildren(left, right);
+        }
+
+        // try to convert the right literal to left type.
+        if (isRightLiteralConvertible(left, right)) {
+            if (!supportCompare(left.getDataType())) {
+                throw new AnalysisException("data type " + left.getDataType()
+                        + " could not used in ComparisonPredicate " + comparisonPredicate.toSql());
+            }
+            right = castIfNotSameType(right, left.getDataType());
             return comparisonPredicate.withChildren(left, right);
         }
 
@@ -1108,6 +1127,7 @@ public class TypeCoercionUtils {
 
     /**
      * check should downgrade from commonTypeClazz to targetTypeClazz.
+     *
      * @param commonTypeClazz before downgrade type
      * @param targetTypeClazz try to downgrade to type
      * @param commonType original common type
@@ -1115,7 +1135,6 @@ public class TypeCoercionUtils {
      * @param commonTypePredicate constraint for original type
      * @param otherPredicate constraint for other expressions aka literals
      * @param others literals
-     *
      * @return true for should downgrade
      */
     private static boolean shouldDowngrade(
@@ -1317,10 +1336,10 @@ public class TypeCoercionUtils {
     /**
      * get common type for comparison.
      * in legacy planner, comparison predicate convert int vs string to double.
-     *   however, in predicate and between predicate convert int vs string to string
-     *   but after between rewritten to comparison predicate,
-     *   int vs string been convert to double again
-     *   so, in Nereids, only in predicate set this flag to true.
+     * however, in predicate and between predicate convert int vs string to string
+     * but after between rewritten to comparison predicate,
+     * int vs string been convert to double again
+     * so, in Nereids, only in predicate set this flag to true.
      */
     private static Optional<DataType> findCommonPrimitiveTypeForComparison(
             DataType leftType, DataType rightType, boolean intStringToString) {
