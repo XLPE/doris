@@ -21,10 +21,9 @@ import org.apache.doris.nereids.trees.expressions.functions.executable.StringAri
 import org.apache.doris.nereids.trees.expressions.literal.IntegerLiteral;
 import org.apache.doris.nereids.trees.expressions.literal.StringLiteral;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-
-import org.junit.jupiter.api.Assertions;
 
 public class StringArithmeticTest {
     /**
