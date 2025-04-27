@@ -17,13 +17,17 @@ public class StringArithmeticTest {
     class LocateFunctionTests {
 
         private void assertLocate(String subStr, String mainStr, int expected) {
-            IntegerLiteral result = (IntegerLiteral) StringArithmetic.locate(new StringLiteral(subStr), new StringLiteral(mainStr));
-            assertEquals(expected, result.getValue(), String.format("locate('%s', '%s') should return %d", subStr, mainStr, expected));
+            IntegerLiteral result = (IntegerLiteral) StringArithmetic.locate(new StringLiteral(subStr),
+                    new StringLiteral(mainStr));
+            assertEquals(expected, result.getValue(),
+                    String.format("locate('%s', '%s') should return %d", subStr, mainStr, expected));
         }
 
         private void assertLocate(String subStr, String mainStr, int pos, int expected) {
-            IntegerLiteral result = (IntegerLiteral) StringArithmetic.locate(new StringLiteral(subStr), new StringLiteral(mainStr), new IntegerLiteral(pos));
-            assertEquals(expected, result.getValue(), String.format("locate('%s', '%s', %d) should return %d", subStr, mainStr, pos, expected));
+            IntegerLiteral result = (IntegerLiteral) StringArithmetic.locate(new StringLiteral(subStr),
+                    new StringLiteral(mainStr), new IntegerLiteral(pos));
+            assertEquals(expected, result.getValue(),
+                    String.format("locate('%s', '%s', %d) should return %d", subStr, mainStr, pos, expected));
         }
 
         @Test
