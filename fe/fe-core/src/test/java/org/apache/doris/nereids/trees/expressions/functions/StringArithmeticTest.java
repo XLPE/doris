@@ -30,7 +30,7 @@ public class StringArithmeticTest {
      * locate function test units.
      */
     @Nested
-    class LocateFunctionTests {
+    class LocateFunctionTest {
 
         private void assertLocate(String subStr, String mainStr, int expected) {
             IntegerLiteral result = (IntegerLiteral) StringArithmetic.locate(new StringLiteral(subStr),
