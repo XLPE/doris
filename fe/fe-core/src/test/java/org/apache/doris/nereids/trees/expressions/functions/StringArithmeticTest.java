@@ -48,12 +48,13 @@ public class StringArithmeticTest {
 
         @Test
         void testLocateEmptySubstring() {
+            assertLocate("", "", 1);
             assertLocate("", "hello", 1);
             assertLocate("", "hello", 0, 0);
             assertLocate("", "hello", 1, 1);
             assertLocate("", "hello", 3, 3);
             assertLocate("", "hello", 5, 5);
-            assertLocate("", "hello", 10, 0);
+            assertLocate("", "hello", 6, 0);
         }
 
         @Test
@@ -65,6 +66,9 @@ public class StringArithmeticTest {
             assertLocate("l", "hello", 10, 0);
             assertLocate("l", "hello", -1, 0);
             assertLocate("l", "hello", 0, 0);
+            assertLocate("一二", "一二三四五六", 1);
+            assertLocate("三四", "一二三四五六", 2,3);
+            assertLocate("六", "一二三四五六", 6,6);
         }
     }
 }

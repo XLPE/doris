@@ -327,11 +327,11 @@ public class StringArithmetic {
     @ExecFunction(name = "locate")
     public static Expression locate(StringLikeLiteral first, StringLikeLiteral second, IntegerLiteral third) {
         int startIndex = third.getValue() - 1;
-        if (startIndex < 0) {
-            return new IntegerLiteral(0);
-        }
         String mainStr = second.getValue();
         String subStr = first.getValue();
+        if (startIndex < 0 || startIndex >= mainStr.length()) {
+            return new IntegerLiteral(0);
+        }
         int index = mainStr.indexOf(subStr, startIndex);
         if (index != -1) {
             return new IntegerLiteral(index + 1);
