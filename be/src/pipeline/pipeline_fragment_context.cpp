@@ -131,7 +131,8 @@ PipelineFragmentContext::PipelineFragmentContext(
           _query_ctx(std::move(query_ctx)),
           _call_back(call_back),
           _is_report_on_cancel(true),
-          _report_status_cb(report_status_cb) {
+          _report_status_cb(report_status_cb),
+          _parallel_task_latch(0) {
     _fragment_watcher.start();
 }
 
@@ -530,7 +531,9 @@ Status PipelineFragmentContext::_build_pipeline_tasks(const doris::TPipelineFrag
         std::condition_variable cv;
         int prepare_done = 0;
         for (int i = 0; i < target_size; i++) {
-            RETURN_IF_ERROR(thread_pool->submit_func([&, i]() {
+            _parallel_task_latch.add_count();
+            Status status = thread_pool->submit_func([&, i]() {
+                CountDownOnScopeExit guard(&_parallel_task_latch);
                 SCOPED_ATTACH_TASK(_query_ctx.get());
                 prepare_status[i] = pre_and_submit(i, this);
                 std::unique_lock<std::mutex> lock(m);
@@ -538,7 +541,11 @@ Status PipelineFragmentContext::_build_pipeline_tasks(const doris::TPipelineFrag
                 if (prepare_done == target_size) {
                     cv.notify_one();
                 }
-            }));
+            });
+            if (UNLIKELY(!_status_.ok())) {
+                _parallel_task_latch.count_down();
+                return status;
+            }
         }
         std::unique_lock<std::mutex> lock(m);
         if (prepare_done != target_size) {

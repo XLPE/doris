@@ -57,6 +57,13 @@ public:
         }
     }
 
+    // Increase the count of the latch by a given amount.
+    void add_count(int amount = 1) {
+        DCHECK_GE(amount, 0);
+        std::lock_guard<std::mutex> lock(_lock);
+        _count += amount;
+    }
+
     // Decrement the count of this latch.
     // If the new count is zero, then all waiting threads are woken up.
     // If the count is already zero, this has no effect.
