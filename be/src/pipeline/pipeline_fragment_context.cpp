@@ -139,8 +139,8 @@ PipelineFragmentContext::PipelineFragmentContext(
 PipelineFragmentContext::~PipelineFragmentContext() {
     LOG_INFO("PipelineFragmentContext::~PipelineFragmentContext")
             .tag("query_id", print_id(_query_id))
-            .tag("fragment_id", _fragment_id);
-    LOG_INFO("PipelineFragmentContext::~PipelineFragmentContext").tag("_parallel_task_latch",_parallel_task_latch.count());
+            .tag("fragment_id", _fragment_id)
+            .tag("_parallel_task_latch", _parallel_task_latch.count());
     _parallel_task_latch.wait();
     // The memory released by the query end is recorded in the query mem tracker.
     SCOPED_SWITCH_THREAD_MEM_TRACKER_LIMITER(_query_ctx->query_mem_tracker());
