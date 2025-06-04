@@ -34,6 +34,10 @@ class CountDownLatch {
 public:
     // Initialize the latch with the given initial count.
     explicit CountDownLatch(int count) : _count(count) {}
+    CountDownLatch(const CountDownLatch&) = delete;
+    void operator=(const CountDownLatch&) = delete;
+    CountDownLatch(CountDownLatch&&) = delete;
+    CountDownLatch& operator=(CountDownLatch&&) = delete;
 
     // Decrement the count of this latch by 'amount'
     // If the new count is less than or equal to zero, then all waiting threads are woken up.
@@ -106,24 +110,21 @@ public:
 private:
     mutable std::mutex _lock;
     mutable std::condition_variable _cond;
-
     uint64_t _count;
-
-    CountDownLatch(const CountDownLatch&) = delete;
-    void operator=(const CountDownLatch&) = delete;
 };
 
-// Utility class which calls latch->CountDown() in its destructor.
-class CountDownOnScopeExit {
+// RAII CountDownLatch
+class TaskScopeGuard {
 public:
-    explicit CountDownOnScopeExit(CountDownLatch* latch) : _latch(latch) {}
-    ~CountDownOnScopeExit() { _latch->count_down(); }
+    explicit TaskScopeGuard(CountDownLatch& latch) : latch_(latch) { latch_.add_count(); }
+    ~TaskScopeGuard() { latch_.count_down(); }
+    TaskScopeGuard(const TaskScopeGuard&) = delete;
+    void operator=(const TaskScopeGuard&) = delete;
+    TaskScopeGuard(TaskScopeGuard&&) = delete;
+    TaskScopeGuard& operator=(TaskScopeGuard&&) = delete;
 
 private:
-    CountDownLatch* _latch = nullptr;
-
-    CountDownOnScopeExit(const CountDownOnScopeExit&) = delete;
-    void operator=(const CountDownOnScopeExit&) = delete;
+    CountDownLatch& latch_;
 };
 
 } // namespace doris

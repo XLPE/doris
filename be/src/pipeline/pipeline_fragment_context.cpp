@@ -131,17 +131,14 @@ PipelineFragmentContext::PipelineFragmentContext(
           _query_ctx(std::move(query_ctx)),
           _call_back(call_back),
           _is_report_on_cancel(true),
-          _report_status_cb(report_status_cb),
-          _parallel_task_latch(0) {
+          _report_status_cb(report_status_cb) {
     _fragment_watcher.start();
 }
 
 PipelineFragmentContext::~PipelineFragmentContext() {
     LOG_INFO("PipelineFragmentContext::~PipelineFragmentContext")
             .tag("query_id", print_id(_query_id))
-            .tag("fragment_id", _fragment_id)
-            .tag("_parallel_task_latch", _parallel_task_latch.count());
-    _parallel_task_latch.wait();
+            .tag("fragment_id", _fragment_id);
     // The memory released by the query end is recorded in the query mem tracker.
     SCOPED_SWITCH_THREAD_MEM_TRACKER_LIMITER(_query_ctx->query_mem_tracker());
     auto st = _query_ctx->exec_status();
@@ -532,22 +529,17 @@ Status PipelineFragmentContext::_build_pipeline_tasks(const doris::TPipelineFrag
         std::mutex m;
         std::condition_variable cv;
         int prepare_done = 0;
+        auto self = std::static_pointer_cast<doris::pipeline::PipelineFragmentContext>(shared_from_this());
         for (int i = 0; i < target_size; i++) {
-            _parallel_task_latch.add_count();
-            Status submmit_status = thread_pool->submit_func([&, i]() {
-                CountDownOnScopeExit guard(&_parallel_task_latch);
-                SCOPED_ATTACH_TASK(_query_ctx.get());
-                prepare_status[i] = pre_and_submit(i, this);
+            RETURN_IF_ERROR(thread_pool->submit_func([&, self, i]() {
+                SCOPED_ATTACH_TASK(self->_query_ctx.get());
+                prepare_status[i] = pre_and_submit(i, self.get());
                 std::unique_lock<std::mutex> lock(m);
                 prepare_done++;
                 if (prepare_done == target_size) {
                     cv.notify_one();
                 }
-            });
-            if (UNLIKELY(!submmit_status.ok())) {
-                _parallel_task_latch.count_down();
-                return submmit_status;
-            }
+            }));
         }
         std::unique_lock<std::mutex> lock(m);
         if (prepare_done != target_size) {
