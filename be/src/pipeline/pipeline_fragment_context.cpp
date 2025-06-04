@@ -140,6 +140,7 @@ PipelineFragmentContext::~PipelineFragmentContext() {
     LOG_INFO("PipelineFragmentContext::~PipelineFragmentContext")
             .tag("query_id", print_id(_query_id))
             .tag("fragment_id", _fragment_id);
+    LOG_INFO("PipelineFragmentContext::~PipelineFragmentContext").tag("_parallel_task_latch",_parallel_task_latch.count());
     _parallel_task_latch.wait();
     // The memory released by the query end is recorded in the query mem tracker.
     SCOPED_SWITCH_THREAD_MEM_TRACKER_LIMITER(_query_ctx->query_mem_tracker());
@@ -533,7 +534,7 @@ Status PipelineFragmentContext::_build_pipeline_tasks(const doris::TPipelineFrag
         int prepare_done = 0;
         for (int i = 0; i < target_size; i++) {
             _parallel_task_latch.add_count();
-            Status status = thread_pool->submit_func([&, i]() {
+            Status submmit_status = thread_pool->submit_func([&, i]() {
                 CountDownOnScopeExit guard(&_parallel_task_latch);
                 SCOPED_ATTACH_TASK(_query_ctx.get());
                 prepare_status[i] = pre_and_submit(i, this);
@@ -543,9 +544,9 @@ Status PipelineFragmentContext::_build_pipeline_tasks(const doris::TPipelineFrag
                     cv.notify_one();
                 }
             });
-            if (UNLIKELY(!status.ok())) {
+            if (UNLIKELY(!submmit_status.ok())) {
                 _parallel_task_latch.count_down();
-                return status;
+                return submmit_status;
             }
         }
         std::unique_lock<std::mutex> lock(m);
