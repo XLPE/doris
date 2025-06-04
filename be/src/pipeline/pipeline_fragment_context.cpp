@@ -542,7 +542,7 @@ Status PipelineFragmentContext::_build_pipeline_tasks(const doris::TPipelineFrag
                     cv.notify_one();
                 }
             });
-            if (UNLIKELY(!_status_.ok())) {
+            if (UNLIKELY(!status.ok())) {
                 _parallel_task_latch.count_down();
                 return status;
             }
