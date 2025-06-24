@@ -292,6 +292,7 @@ public class CloudWarmUpJob implements Writable {
                     throw new RuntimeException(e);
                 } finally {
                     if (!ok) {
+                        LOG.info("warm up---------------");
                         ClientPool.backendPool.invalidateObject(address, client);
                         releaseClients();
                     }
@@ -303,6 +304,7 @@ public class CloudWarmUpJob implements Writable {
     public void releaseClients() {
         if (beToClient != null) {
             for (Map.Entry<Long, Client> entry : beToClient.entrySet()) {
+                LOG.info("warm up---------------");
                 ClientPool.backendPool.returnObject(beToAddr.get(entry.getKey()),
                         entry.getValue());
             }
