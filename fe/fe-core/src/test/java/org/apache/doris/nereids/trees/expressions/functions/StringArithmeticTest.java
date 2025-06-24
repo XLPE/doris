@@ -67,8 +67,8 @@ public class StringArithmeticTest {
             assertLocate("l", "hello", -1, 0);
             assertLocate("l", "hello", 0, 0);
             assertLocate("一二", "一二三四五六", 1);
-            assertLocate("三四", "一二三四五六", 2,3);
-            assertLocate("六", "一二三四五六", 6,6);
+            assertLocate("三四", "一二三四五六", 2, 3);
+            assertLocate("六", "一二三四五六", 6, 6);
         }
     }
 }
