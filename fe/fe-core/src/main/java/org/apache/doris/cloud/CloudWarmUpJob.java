@@ -423,12 +423,14 @@ public class CloudWarmUpJob implements Writable {
                         Env.getCurrentEnv().getEditLog().logModifyCloudWarmUpJob(this);
                     }
                     boolean allBatchesDone = true;
+                    LOG.info("warm up---------------");
                     for (Map.Entry<Long, Client> entry : beToClient.entrySet()) {
                         TWarmUpTabletsRequest request = new TWarmUpTabletsRequest();
                         request.setType(TWarmUpTabletsRequestType.SET_BATCH);
                         request.setJobId(jobId);
                         request.setBatchId(lastBatchId + 1);
                         request.setJobMetas(buildJobMetas(entry.getKey(), request.batch_id));
+                        LOG.info("warm up---------------");
                         if (!request.job_metas.isEmpty()) {
                             // check all batches is done or not
                             allBatchesDone = false;
@@ -442,8 +444,11 @@ public class CloudWarmUpJob implements Writable {
                                 }
                                 changeToCancelState = true;
                             }
+                            LOG.info("warm up---------------");
                         }
+                        LOG.info("warm up---------------");
                     }
+                    LOG.info("warm up---------------");
                     if (allBatchesDone) {
                         // release job
                         this.jobState = JobState.FINISHED;
