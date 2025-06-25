@@ -74,7 +74,7 @@ void CloudWarmUpManager::handle_jobs() {
         }
 
         if (!cur_job) {
-            LOG_WARNING("Warm up job is null");
+            LOG_WARNING("Warm up job is null,_pending_job_metas size:{}",_pending_job_metas.size());
             continue;
         }
         for (int64_t tablet_id : cur_job->tablet_ids) {
@@ -180,6 +180,7 @@ void CloudWarmUpManager::handle_jobs() {
         }
         {
             std::unique_lock lock(_mtx);
+            LOG_WARNING("warm up _pending_job_metas size:{}", _pending_job_metas.size());
             _finish_job.push_back(cur_job);
             _pending_job_metas.pop_front();
         }
