@@ -70,6 +70,7 @@ void CloudWarmUpManager::handle_jobs() {
                 _cond.wait(lock);
             }
             if (_closed) break;
+            LOG_WARNING("_pending_job_metas size:{}",_pending_job_metas.size());
             cur_job = _pending_job_metas.front();
         }
 
@@ -241,6 +242,7 @@ void CloudWarmUpManager::add_job(const std::vector<TJobMeta>& job_metas) {
         std::for_each(job_metas.begin(), job_metas.end(), [this](const TJobMeta& meta) {
             _pending_job_metas.emplace_back(std::make_shared<JobMeta>(meta));
         });
+        LOG_WARNING("warm up _pending_job_metas size:{},job_metas size:{}", _pending_job_metas.size(),job_metas.size());
     }
     _cond.notify_all();
 }
