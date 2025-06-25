@@ -70,12 +70,13 @@ void CloudWarmUpManager::handle_jobs() {
                 _cond.wait(lock);
             }
             if (_closed) break;
-            LOG_WARNING("_pending_job_metas size:{}",_pending_job_metas.size());
+            LOG_WARNING("_pending_job_metas size:{}", _pending_job_metas.size());
             cur_job = _pending_job_metas.front();
         }
 
         if (!cur_job) {
-            LOG_WARNING("Warm up job is null,_pending_job_metas size:{}",_pending_job_metas.size());
+            LOG_WARNING("Warm up job is null,_pending_job_metas size:{}",
+                        _pending_job_metas.size());
             continue;
         }
         for (int64_t tablet_id : cur_job->tablet_ids) {
@@ -182,8 +183,10 @@ void CloudWarmUpManager::handle_jobs() {
         {
             std::unique_lock lock(_mtx);
             LOG_WARNING("warm up _pending_job_metas size:{}", _pending_job_metas.size());
-            _finish_job.push_back(cur_job);
-            _pending_job_metas.pop_front();
+            if (!_pending_job_metas.empty()) {
+                _finish_job.push_back(cur_job);
+                _pending_job_metas.pop_front();
+            }
         }
     }
 #endif
@@ -242,7 +245,8 @@ void CloudWarmUpManager::add_job(const std::vector<TJobMeta>& job_metas) {
         std::for_each(job_metas.begin(), job_metas.end(), [this](const TJobMeta& meta) {
             _pending_job_metas.emplace_back(std::make_shared<JobMeta>(meta));
         });
-        LOG_WARNING("warm up _pending_job_metas size:{},job_metas size:{}", _pending_job_metas.size(),job_metas.size());
+        LOG_WARNING("warm up _pending_job_metas size:{},job_metas size:{}",
+                    _pending_job_metas.size(), job_metas.size());
     }
     _cond.notify_all();
 }
