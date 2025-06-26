@@ -72,10 +72,6 @@ void CloudWarmUpManager::handle_jobs() {
             if (_closed) break;
             cur_job = _pending_job_metas.front();
         }
-
-        if (!cur_job) {
-            continue;
-        }
         for (int64_t tablet_id : cur_job->tablet_ids) {
             if (_cur_job_id == 0) { // The job is canceled
                 break;
