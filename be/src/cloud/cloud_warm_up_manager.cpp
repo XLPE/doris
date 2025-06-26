@@ -175,6 +175,7 @@ void CloudWarmUpManager::handle_jobs() {
         }
         {
             std::unique_lock lock(_mtx);
+            // If it is empty, it means the job has been cleared during the lock release period.
             if (!_pending_job_metas.empty()) {
                 _finish_job.push_back(cur_job);
                 _pending_job_metas.pop_front();
