@@ -264,6 +264,9 @@ std::tuple<int64_t, int64_t, int64_t, int64_t> CloudWarmUpManager::get_current_j
 Status CloudWarmUpManager::clear_job(int64_t job_id) {
     std::lock_guard lock(_mtx);
     Status st = Status::OK();
+    if (_cur_job_id == 0) {
+        return st;
+    }
     if (job_id == _cur_job_id) {
         _cur_job_id = 0;
         _cur_batch_id = -1;
