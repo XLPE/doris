@@ -23,6 +23,7 @@ import org.apache.doris.nereids.trees.expressions.EqualTo;
 import org.apache.doris.nereids.trees.expressions.Expression;
 import org.apache.doris.nereids.trees.expressions.Like;
 import org.apache.doris.nereids.trees.expressions.literal.VarcharLiteral;
+import org.apache.doris.qe.SqlModeHelper;
 
 import com.google.common.collect.ImmutableList;
 
@@ -50,10 +51,12 @@ public class LikeToEqualRewrite implements ExpressionPatternRuleFactory {
         String str = ((VarcharLiteral) right).value;
         StringBuilder sb = new StringBuilder();
         int len = str.length();
+        // 检查是否启用 NO_BACKSLASH_ESCAPES 模式
+        boolean noBackslashEscapes = SqlModeHelper.hasNoBackSlashEscapes();
         char escapeChar = '\\';
         for (int i = 0; i < len;) {
             char c = str.charAt(i);
-            if (c == escapeChar && (i + 1) < len
+            if (!noBackslashEscapes && c == escapeChar && (i + 1) < len
                     && (str.charAt(i + 1) == '%' || str.charAt(i + 1) == '_' || str.charAt(i + 1) == escapeChar)) {
                 sb.append(str.charAt(i + 1));
                 i += 2;
