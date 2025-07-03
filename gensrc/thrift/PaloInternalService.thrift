@@ -362,6 +362,8 @@ struct TQueryOptions {
   163: optional bool inverted_index_compatible_read = false
   // upgrade options. keep them same in every branch.
   200: optional bool new_is_ip_address_in_range = false;
+  // mysql compatible
+  201: optional i64  sql_mode = 0;
 
   // For cloud, to control if the content would be written into file cache
   // In write path, to control if the content would be written into file cache.
