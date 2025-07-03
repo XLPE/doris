@@ -425,6 +425,7 @@ public class Coordinator implements CoordInterface {
         this.queryOptions.setWaitFullBlockScheduleTimes(context.getSessionVariable().getWaitFullBlockScheduleTimes());
         this.queryOptions.setMysqlRowBinaryFormat(
                     context.getCommand() == MysqlCommand.COM_STMT_EXECUTE);
+        this.queryOptions.setSqlMode(context.getSessionVariable().getSqlMode());
     }
 
     public ConnectContext getConnectContext() {
