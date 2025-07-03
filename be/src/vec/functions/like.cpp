@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "runtime/runtime_state.h"
 #include "vec/columns/column.h"
 #include "vec/columns/column_const.h"
 #include "vec/columns/column_vector.h"
@@ -709,7 +710,6 @@ Status FunctionLike::like_fn_scalar(LikeSearchState* state, const StringRef& val
 void FunctionLike::convert_like_pattern(LikeSearchState* state, const std::string& pattern,
                                         std::string* re_pattern) {
     re_pattern->clear();
-
     if (pattern.empty()) {
         re_pattern->append("^$");
         return;
@@ -920,6 +920,8 @@ Status FunctionLike::open(FunctionContext* context, FunctionContext::FunctionSta
     state->is_like_pattern = true;
     state->function = like_fn;
     state->scalar_function = like_fn_scalar;
+    auto sql_mode = context->state()->query_options().sql_mode;
+    LOG(INFO) << "sql_mode:" << sql_mode;
     if (context->is_col_constant(1)) {
         const auto pattern_col = context->get_constant_col(1)->column_ptr;
         const auto& pattern = pattern_col->get_data_at(0);
