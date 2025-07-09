@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "exprs/string_functions.h"
 #include "runtime/runtime_state.h"
 #include "vec/columns/column.h"
 #include "vec/columns/column_const.h"
@@ -399,14 +400,13 @@ Status FunctionLikeBase::constant_regex_fn_scalar(LikeSearchState* state, const 
 
 Status FunctionLikeBase::regexp_fn_scalar(LikeSearchState* state, const StringRef& val,
                                           const StringRef& pattern, unsigned char* result) {
-    RE2::Options opts;
-    opts.set_never_nl(false);
-    opts.set_dot_nl(true);
-    re2::RE2 re(re2::StringPiece(pattern.data, pattern.size), opts);
-    if (re.ok()) {
-        *result = RE2::PartialMatch(re2::StringPiece(val.data, val.size), re);
+    std::unique_ptr<re2::RE2> re;
+    std::string error_str;
+    bool st = StringFunctions::compile_regex(pattern, &error_str, StringRef(), re);
+    if (st) {
+        *result = RE2::PartialMatch(re2::StringPiece(val.data, val.size), *re);
     } else {
-        return Status::RuntimeError("Invalid pattern: {}", pattern.debug_string());
+        return Status::RuntimeError(error_str);
     }
 
     return Status::OK();
@@ -459,19 +459,18 @@ Status FunctionLikeBase::regexp_fn(LikeSearchState* state, const ColumnString& v
         hs_free_scratch(scratch);
         hs_free_database(database);
     } else { // fallback to re2
-        RE2::Options opts;
-        opts.set_never_nl(false);
-        opts.set_dot_nl(true);
-        re2::RE2 re(re_pattern, opts);
-        if (re.ok()) {
+        std::unique_ptr<re2::RE2> re;
+        std::string error_str;
+        bool st = StringFunctions::compile_regex(pattern, &error_str, StringRef(), re);
+        if (st) {
             auto sz = val.size();
             for (size_t i = 0; i < sz; i++) {
                 const auto& str_ref = val.get_data_at(i);
                 *(result.data() + i) =
-                        RE2::PartialMatch(re2::StringPiece(str_ref.data, str_ref.size), re);
+                        RE2::PartialMatch(re2::StringPiece(str_ref.data, str_ref.size), *re);
             }
         } else {
-            return Status::RuntimeError("Invalid pattern: {}", pattern.debug_string());
+            return Status::RuntimeError(error_str);
         }
     }
 
@@ -896,14 +895,13 @@ Status FunctionLike::construct_like_const_state(FunctionContext* context, const 
             state->search_state.hs_database.reset();
             state->search_state.hs_scratch.reset();
 
-            RE2::Options opts;
-            opts.set_never_nl(false);
-            opts.set_dot_nl(true);
-            state->search_state.regex = std::make_unique<RE2>(re_pattern, opts);
-            if (!state->search_state.regex->ok()) {
-                return Status::InternalError("Invalid regex expression: {}(origin: {})", re_pattern,
-                                             pattern_str);
+            std::unique_ptr<re2::RE2> scoped_re;
+            std::string error_str;
+            bool st = StringFunctions::compile_regex(pattern, &error_str, StringRef(), scoped_re);
+            if (!st) {
+                return Status::InternalError(error_str);
             }
+            state->search_state.regex = std::move(scoped_re);
         }
 
         state->function = constant_regex_fn;
@@ -980,13 +978,13 @@ Status FunctionRegexpLike::open(FunctionContext* context,
                 // reset hs_database to nullptr to indicate not use hyperscan
                 state->search_state.hs_database.reset();
                 state->search_state.hs_scratch.reset();
-                RE2::Options opts;
-                opts.set_never_nl(false);
-                opts.set_dot_nl(true);
-                state->search_state.regex = std::make_unique<RE2>(pattern_str, opts);
-                if (!state->search_state.regex->ok()) {
-                    return Status::InternalError("Invalid regex expression: {}", pattern_str);
+                std::unique_ptr<re2::RE2> re;
+                std::string error_str;
+                bool st = StringFunctions::compile_regex(pattern, &error_str, StringRef(), re);
+                if (!st) {
+                    return Status::InternalError(error_str);
                 }
+                state->search_state.regex = std::move(re);
             }
             state->function = constant_regex_fn;
             state->scalar_function = constant_regex_fn_scalar;
