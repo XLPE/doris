@@ -34,8 +34,11 @@ import java.util.List;
  */
 public class Like extends StringRegexPredicate {
 
-    private static final List<FunctionSignature> SIGNATURES = ImmutableList.of(FunctionSignature.ret(BooleanType.INSTANCE).args(VarcharType.SYSTEM_DEFAULT, VarcharType.SYSTEM_DEFAULT),FunctionSignature.ret(BooleanType.INSTANCE).args(VarcharType.SYSTEM_DEFAULT, VarcharType.SYSTEM_DEFAULT,VarcharType.SYSTEM_DEFAULT));
-    
+    private static final List<FunctionSignature> SIGNATURES = ImmutableList.of(
+            FunctionSignature.ret(BooleanType.INSTANCE).args(VarcharType.SYSTEM_DEFAULT, VarcharType.SYSTEM_DEFAULT),
+            FunctionSignature.ret(BooleanType.INSTANCE)
+                    .args(VarcharType.SYSTEM_DEFAULT, VarcharType.SYSTEM_DEFAULT, VarcharType.SYSTEM_DEFAULT));
+
     public Like(Expression left, Expression right) {
         this(ImmutableList.of(left, right));
     }

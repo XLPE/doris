@@ -51,13 +51,12 @@ public class LikeToEqualRewrite implements ExpressionPatternRuleFactory {
         String str = ((VarcharLiteral) right).value;
         StringBuilder sb = new StringBuilder();
         int len = str.length();
-        // 检查是否启用 NO_BACKSLASH_ESCAPES 模式
         boolean noBackslashEscapes = SqlModeHelper.hasNoBackSlashEscapes();
         char escapeChar = '\\';
         if (like.arity() == 3) {
             escapeChar = ((VarcharLiteral) like.child(2)).value.charAt(0);
         }
-        for (int i = 0; i < len;) {
+        for (int i = 0; i < len; ) {
             char c = str.charAt(i);
             if (!noBackslashEscapes && c == escapeChar && (i + 1) < len
                     && (str.charAt(i + 1) == '%' || str.charAt(i + 1) == '_' || str.charAt(i + 1) == escapeChar)) {
