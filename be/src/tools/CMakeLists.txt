@@ -45,3 +45,33 @@ add_custom_command(TARGET meta_tool POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=$<TARGET_FILE:meta_tool>.dbg $<TARGET_FILE:meta_tool>
     )
 endif()
+
+
+
+# 添加rowset_debug可执行目标
+add_executable(rowset_debug
+    rowset_debug.cpp
+)
+
+# 复用预编译头
+pch_reuse(rowset_debug)
+
+# 设置与meta_tool相同的属性（允许dlopen加载的库链接到程序符号）
+set_target_properties(rowset_debug PROPERTIES ENABLE_EXPORTS 1)
+
+# 链接Doris库
+target_link_libraries(rowset_debug
+    ${DORIS_LINK_LIBS}
+)
+
+# 添加到安装目标
+install(TARGETS rowset_debug DESTINATION ${OUTPUT_DIR}/lib/)
+
+# 非macOS系统的调试信息处理（与meta_tool保持一致）
+if (NOT OS_MACOSX)
+add_custom_command(TARGET rowset_debug POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} --only-keep-debug $<TARGET_FILE:rowset_debug> $<TARGET_FILE:rowset_debug>.dbg
+    COMMAND ${CMAKE_STRIP} --strip-debug --strip-unneeded $<TARGET_FILE:rowset_debug>
+    COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=$<TARGET_FILE:rowset_debug>.dbg $<TARGET_FILE:rowset_debug>
+    )
+endif()
