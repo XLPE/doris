@@ -167,11 +167,12 @@ Status CompactionAction::_handle_run_compaction(HttpRequest* req, std::string* j
         }
 
         // 3. execute compaction task
-        std::packaged_task<Status()> task([this, tablet, compaction_type, fetch_from_remote]() {
-            return _execute_compaction_callback(tablet, compaction_type, fetch_from_remote);
-        });
-        std::future<Status> future_obj = task.get_future();
-        std::thread(std::move(task)).detach();
+        auto shared_promise = std::make_shared<std::promise<Status>>();
+        std::future<Status> future_obj = shared_promise->get_future();
+        std::thread([this, tablet, compaction_type, fetch_from_remote, shared_promise]() {
+            Status result = _execute_compaction_callback(tablet, compaction_type, fetch_from_remote);
+            shared_promise->set_value(std::move(result)); 
+        }).detach();
 
         // 4. wait for result for 2 seconds by async
         std::future_status status = future_obj.wait_for(std::chrono::seconds(2));

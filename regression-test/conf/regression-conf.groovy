@@ -24,10 +24,10 @@ defaultDb = "regression_test"
 // init cmd like: select @@session.tx_read_only
 // at each time we connect.
 // add allowLoadLocalInfile so that the jdbc can execute mysql load data from client.
-jdbcUrl = "jdbc:mysql://127.0.0.1:9030/?useLocalSessionState=true&allowLoadLocalInfile=true"
-targetJdbcUrl = "jdbc:mysql://127.0.0.1:9030/?useLocalSessionState=true&allowLoadLocalInfile=true"
+jdbcUrl = "jdbc:mysql://192.168.21.11:9230/?useLocalSessionState=true&allowLoadLocalInfile=true"
+targetJdbcUrl = "jdbc:mysql://192.168.21.11:9230/?useLocalSessionState=true&allowLoadLocalInfile=true"
 jdbcUser = "root"
-jdbcPassword = ""
+jdbcPassword = "jT!0W168JmUo"
 
 feSourceThriftAddress = "127.0.0.1:9020"
 feTargetThriftAddress = "127.0.0.1:9020"
@@ -35,9 +35,9 @@ syncerAddress = "127.0.0.1:9190"
 feSyncerUser = "root"
 feSyncerPassword = ""
 
-feHttpAddress = "127.0.0.1:8030"
+feHttpAddress = "192.168.21.11:8230"
 feHttpUser = "root"
-feHttpPassword = ""
+feHttpPassword = "jT!0W168JmUo"
 
 // set DORIS_HOME by system properties
 // e.g. java -DDORIS_HOME=./

@@ -660,9 +660,10 @@ void TabletMeta::init_from_pb(const TabletMetaPB& tablet_meta_pb) {
             RowsetId rst_id;
             rst_id.init(tablet_meta_pb.delete_bitmap().rowset_ids(i));
             auto seg_id = tablet_meta_pb.delete_bitmap().segment_ids(i);
-            uint32_t ver = tablet_meta_pb.delete_bitmap().versions(i);
-            auto bitmap = tablet_meta_pb.delete_bitmap().segment_delete_bitmaps(i).data();
+            uint32_t ver = tablet_meta_pb.delete_bitmap().versions(i);           
+            const auto* bitmap = tablet_meta_pb.delete_bitmap().segment_delete_bitmaps(i).data();         
             delete_bitmap().delete_bitmap[{rst_id, seg_id, ver}] = roaring::Roaring::read(bitmap);
+            LOG(INFO) << "load meta.rst_id:" << rst_id << ",seg_id:" << seg_id << ",ver:" << ver << ",deleted by bitmap(rows):" << delete_bitmap().delete_bitmap[{rst_id, seg_id, ver}].cardinality();
         }
     }
 
@@ -1209,6 +1210,7 @@ std::shared_ptr<roaring::Roaring> DeleteBitmap::get_agg(const BitmapKey& bmk) co
                                         DeleteBitmapAggCache::instance()->value(handle));
     // FIXME: do we need a mutex here to get rid of duplicated initializations
     //        of cache entries in some cases?
+    LOG(INFO) << "load meta." << "rowset:" << std::get<0>(bmk).to_string() << "在缓存中没找到";
     if (val == nullptr) { // Renew if needed, put a new Value to cache
         val = new DeleteBitmapAggCache::Value();
         {
@@ -1221,8 +1223,10 @@ std::shared_ptr<roaring::Roaring> DeleteBitmap::get_agg(const BitmapKey& bmk) co
                     break;
                 }
                 val->bitmap |= bm;
+                LOG(INFO) << "load meta." << "拼接,rowset:" << std::get<0>(k).to_string() << ".verson:" << std::get<2>(k);
             }
         }
+        LOG(INFO) << "load meta." << "rowset:" << std::get<0>(bmk).to_string() << "agg done";
         size_t charge = val->bitmap.getSizeInBytes() + sizeof(DeleteBitmapAggCache::Value);
         handle = DeleteBitmapAggCache::instance()->insert(key, val, charge, charge,
                                                           CachePriority::NORMAL);

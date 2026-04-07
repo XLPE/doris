@@ -37,7 +37,7 @@ public:
 
     Status prepare_compact() override;
     Status execute_compact_impl() override;
-    Status modify_rowsets(const Merger::Statistics* stats = nullptr) override;
+    Status modify_rowsets1(const Merger::Statistics* stats = nullptr);
 
 protected:
     Status pick_rowsets_to_compact() override;

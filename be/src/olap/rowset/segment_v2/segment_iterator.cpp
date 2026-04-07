@@ -388,9 +388,17 @@ Status SegmentIterator::_lazy_init() {
         size_t pre_size = _row_bitmap.cardinality();
         _row_bitmap -= *(_opts.delete_bitmap.at(segment_id()));
         _opts.stats->rows_del_by_bitmap += (pre_size - _row_bitmap.cardinality());
-        VLOG_DEBUG << "read on segment: " << segment_id() << ", delete bitmap cardinality: "
+        LOG(INFO) << "read on tablet_id:" << _opts.tablet_id
+                   << ", rowset_id:" << _opts.rowset_id.to_string() << ", segment: " << segment_id()
+                   << ",segment rows:" << _segment->num_rows()
+                   << ", delete bitmap cardinality: "
                    << _opts.delete_bitmap.at(segment_id())->cardinality() << ", "
                    << _opts.stats->rows_del_by_bitmap << " rows deleted by bitmap";
+    } else {
+         LOG(INFO) << "read on tablet_id:" << _opts.tablet_id
+                   << ", rowset_id:" << _opts.rowset_id.to_string() << ", segment: " << segment_id()
+                   << ",segment rows:" << _segment->num_rows()
+                   << ",delete bitmap is empty:" << _opts.delete_bitmap.size();
     }
 
     if (!_opts.row_ranges.is_empty()) {
@@ -1670,6 +1678,9 @@ Status SegmentIterator::_read_columns_by_index(uint32_t nrows_read_limit, uint32
     SCOPED_RAW_TIMER(&_opts.stats->first_read_ns);
 
     nrows_read = _range_iter->read_batch_rowids(_block_rowids.data(), nrows_read_limit);
+    LOG(INFO) << "read rowids:" << _opts.tablet_id
+              << ", rowset_id:" << _opts.rowset_id.to_string() << ", segment: " << segment_id()
+              << ",nrows_read_limit:" << nrows_read_limit << " nrows_read:" << nrows_read << ",";
     bool is_continuous = (nrows_read > 1) &&
                          (_block_rowids[nrows_read - 1] - _block_rowids[0] == nrows_read - 1);
 
@@ -2231,6 +2242,10 @@ Status SegmentIterator::_next_batch_internal(vectorized::Block* block) {
         if (_non_predicate_columns.empty()) {
             // shrink char_type suffix zero data
             block->shrink_char_type_column_suffix_zero(_char_type_idx);
+            LOG(INFO) << "_non_predicate_columns is emtpy,read block on tablet_id:" << _opts.tablet_id
+              << ", rowset_id:" << _opts.rowset_id.to_string() << ", segment: " << segment_id()
+              << ",current read:" << block->rows() << " rows"
+              << ",total read:" << _opts.stats->raw_rows_read;
 
             return Status::OK();
         }
@@ -2262,8 +2277,11 @@ Status SegmentIterator::_next_batch_internal(vectorized::Block* block) {
         }
     }
 #endif
-    VLOG_DEBUG << "dump block " << block->dump_data(0, block->rows());
-
+    //VLOG_DEBUG << "dump block " << block->dump_data(0, block->rows());
+    LOG(INFO) << "read block on tablet_id:" << _opts.tablet_id
+              << ", rowset_id:" << _opts.rowset_id.to_string() << ", segment: " << segment_id()
+              << ",current read:" << block->rows() << " rows"
+              << ",total read:" << _opts.stats->raw_rows_read;
     return Status::OK();
 }
 

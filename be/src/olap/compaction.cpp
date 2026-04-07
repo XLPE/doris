@@ -398,6 +398,8 @@ Status Compaction::do_compaction_impl(int64_t permits) {
         }
     }
 
+    LOG(INFO) << "delete bitmap监控,"  << _tablet->print_delete_bitmap();
+
     _tablet->last_compaction_status = res;
 
     if (!res.ok()) {
@@ -1006,10 +1008,26 @@ Status Compaction::modify_rowsets(const Merger::Statistics* stats) {
         // of incremental data later.
         // TODO(LiaoXin): check if there are duplicate keys
         std::size_t missed_rows_size = 0;
+        string str_rowset;
+        for(auto& rowset : _input_rowsets){
+            str_rowset.append(rowset->rowset_id().to_string());
+            str_rowset.append(",");
+        }
+        LOG(INFO) << "cal compaction output rowset,input rowset:" <<  str_rowset << ",version:" << version.to_string() << ",delete bitmap监控:" << _tablet->print_delete_bitmap();
         _tablet->calc_compaction_output_rowset_delete_bitmap(
                 _input_rowsets, *_rowid_conversion, 0, version.second + 1, missed_rows.get(),
                 location_map.get(), _tablet->tablet_meta()->delete_bitmap(),
                 &output_rowset_delete_bitmap);
+        std::ostringstream output_rowset_delete_bitmap_str;
+        for (const auto& dd : output_rowset_delete_bitmap.delete_bitmap) {
+            const auto& bk = dd.first;
+            const RowsetId& rs = std::get<0>(bk); 
+            const auto& version = std::get<2>(bk); 
+
+            output_rowset_delete_bitmap_str << ",Rowset ID:" << rs.to_string()
+                << ", Version: " << version << ",cardinality:" << dd.second.cardinality() << ";";
+        }
+        LOG(INFO) << "cal compaction output rowset,output delete_bitmap:" << output_rowset_delete_bitmap_str.str();;
         if (missed_rows) {
             missed_rows_size = missed_rows->size();
             // Suppose a heavy schema change process on BE converting tablet A to tablet B.
@@ -1124,7 +1142,6 @@ Status Compaction::modify_rowsets(const Merger::Statistics* stats) {
             if (location_map) {
                 RETURN_IF_ERROR(_tablet->check_rowid_conversion(_output_rowset, *location_map));
             }
-
             _tablet->merge_delete_bitmap(output_rowset_delete_bitmap);
             RETURN_IF_ERROR(_tablet->modify_rowsets(output_rowsets, _input_rowsets, true));
         }

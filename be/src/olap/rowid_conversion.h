@@ -145,6 +145,31 @@ private:
     // the second level vector: index indicates row id of source segment,
     // value indicates row id of destination segment.
     // <UINT32_MAX, UINT32_MAX> indicates current row not exist.
+    /*
+数据结构如下：
+_segment_to_id_map:
+    键: (RowsetId=123, 段ID=0) → 值: 0
+    键: (RowsetId=123, 段ID=1) → 值: 1
+    键: (RowsetId=123, 段ID=2) → 值: 2
+    
+_id_to_segment_map:
+    索引 0: (RowsetId=123, 段ID=0)
+    索引 1: (RowsetId=123, 段ID=1)
+    索引 2: (RowsetId=123, 段ID=2)
+
+_segments_rowid_map:
+    [
+        // 段0的行ID映射
+        [ (0, 0), (0, 1), (目标段ID, 目标行ID), ... (剩余98个) ],
+        
+        // 段1的行ID映射
+        [ (0, 2), (目标段ID, 目标行ID), ... (剩余199个) ],
+        
+        // 段2的行ID映射
+        [ (目标段ID, 目标行ID), ... (行99), (0, 3), ... (剩余49个) ]
+    ]
+    
+    */
     std::vector<std::vector<std::pair<uint32_t, uint32_t>>> _segments_rowid_map;
     size_t _seg_rowid_map_mem_used {0};
     size_t _std_pair_cap {0};

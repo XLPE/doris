@@ -283,6 +283,22 @@ Status TabletMetaManager::remove_old_version_delete_bitmap(DataDir* store, TTabl
 
     std::vector<std::string> remove_keys;
     auto get_remove_keys_func = [&](const std::string& key, const std::string& val) -> bool {
+        {
+            TTabletId tablet_id;
+            int64_t version;
+            decode_delete_bitmap_key(key, &tablet_id, &version);
+
+            DeleteBitmapPB delete_bitmap_pb;
+            delete_bitmap_pb.ParseFromString(val);
+            int rst_ids_size = delete_bitmap_pb.rowset_ids_size();
+            for (size_t i = 0; i < rst_ids_size; ++i) {
+                RowsetId rst_id;
+                rst_id.init(delete_bitmap_pb.rowset_ids(i));
+                LOG(INFO) << "old version delete bitmap, rocksdb deletemap,tablet:"
+                          << tablet_id << ",version:" << version
+                          << ",rowset:" << rst_id.to_string();
+            }
+        }
         // include end_key
         if (key > end_key) {
             return false;

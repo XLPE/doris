@@ -112,8 +112,14 @@ Status FullCompaction::pick_rowsets_to_compact() {
     return Status::OK();
 }
 
-Status FullCompaction::modify_rowsets(const Merger::Statistics* stats) {
+Status FullCompaction::modify_rowsets1(const Merger::Statistics* stats) {
     std::vector<RowsetSharedPtr> output_rowsets {_output_rowset};
+    int total_rows = 0;
+    for (const auto& rowset : output_rowsets) {
+        total_rows += rowset->num_rows();
+    }
+    LOG(INFO) << "delete bitmap监控," << _tablet->print_delete_bitmap()
+              << ",total rows:" << total_rows;
     if (_tablet->keys_type() == KeysType::UNIQUE_KEYS &&
         _tablet->enable_unique_key_merge_on_write()) {
         std::vector<RowsetSharedPtr> tmp_rowsets {};
@@ -136,6 +142,7 @@ Status FullCompaction::modify_rowsets(const Merger::Statistics* stats) {
             const int64_t& cur_version = it->rowset_meta()->start_version();
             RETURN_IF_ERROR(_full_compaction_calc_delete_bitmap(it, _output_rowset, cur_version,
                                                                 _output_rs_writer.get()));
+            VLOG_DEBUG << "[Full compaction] tmp rowset:" << it->rowset_id().to_string() << ",_output_rowset:" << _output_rowset->rowset_id().to_string() << ",cur_version:" << cur_version << ",max_version:" << max_version;
         }
         DBUG_EXECUTE_IF("FullCompaction.modify_rowsets.before.block", DBUG_BLOCK);
         std::lock_guard rowset_update_lock(_tablet->get_rowset_update_lock());
@@ -147,11 +154,13 @@ Status FullCompaction::modify_rowsets(const Merger::Statistics* stats) {
             if (cur_version > max_version) {
                 RETURN_IF_ERROR(_full_compaction_calc_delete_bitmap(
                         published_rowset, _output_rowset, cur_version, _output_rs_writer.get()));
+                VLOG_DEBUG << "[Full compaction] published_rowset:" << published_rowset->rowset_id().to_string() << ",_output_rowset:" << _output_rowset->rowset_id().to_string() << ",cur_version:" << cur_version << ",max_version:" << max_version;
             }
         }
         RETURN_IF_ERROR(_tablet->modify_rowsets(output_rowsets, _input_rowsets, true));
         DBUG_EXECUTE_IF("FullCompaction.modify_rowsets.sleep", { sleep(5); })
         _tablet->save_meta();
+        LOG(INFO) << "delete bitmap监控,"  << _tablet->print_delete_bitmap();
     } else {
         std::lock_guard<std::mutex> rowset_update_wlock(_tablet->get_rowset_update_lock());
         std::lock_guard<std::shared_mutex> meta_wlock(_tablet->get_header_lock());

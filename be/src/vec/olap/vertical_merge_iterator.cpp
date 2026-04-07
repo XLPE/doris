@@ -327,6 +327,7 @@ Status VerticalMergeIteratorContext::copy_rows(Block* block, bool advanced) {
             d_cp->assume_mutable()->insert_range_from(*s_cp, start, _cur_batch_num);
         }
     });
+    // LOG(INFO) << "_index_in_block:" << _index_in_block << ",_cur_batch_num:" << _cur_batch_num << ",start:" << start << ",dump dst block:" << dst.dump_data(0,dst.rows()) << ",dump src block:" << src.dump_data(0,src.rows());
     _cur_batch_num = 0;
     return Status::OK();
 }
@@ -431,7 +432,7 @@ Status VerticalHeapMergeIterator::next_batch(Block* block) {
             VLOG_NOTICE << "_merge_heap empty";
             break;
         }
-
+        // LOG(INFO) << "dump block " << block->dump_data(0, block->rows());
         auto ctx = _merge_heap.top();
         _merge_heap.pop();
         if (ctx->is_same()) {
@@ -444,12 +445,14 @@ Status VerticalHeapMergeIterator::next_batch(Block* block) {
              _keys_type == KeysType::AGG_KEYS)) {
             // skip cur row, copy pre ctx
             ++_merged_rows;
+            // LOG(INFO) << "duplicate ctx,skip cur row";
             if (pre_ctx) {
                 RETURN_IF_ERROR(pre_ctx->copy_rows(block));
                 pre_ctx = nullptr;
             }
         } else {
             ctx->add_cur_batch();
+            // LOG(INFO) << "no duplicate ctx,ctx assign pre_ctx";
             if (pre_ctx != ctx) {
                 if (pre_ctx) {
                     RETURN_IF_ERROR(pre_ctx->copy_rows(block));
@@ -457,6 +460,7 @@ Status VerticalHeapMergeIterator::next_batch(Block* block) {
                 pre_ctx = ctx;
             }
             if (UNLIKELY(_record_rowids)) {
+                // 这里记录了去重行的行ID,最后在calc_compaction_output_rowset_delete_bitmap的rowid_conversion.get会用到。如果查不到，表示是要删掉的行。
                 _block_row_locations[row_idx] = ctx->current_row_location();
             }
             row_idx++;
@@ -469,10 +473,13 @@ Status VerticalHeapMergeIterator::next_batch(Block* block) {
         }
 
         RETURN_IF_ERROR(ctx->advance());
+        // LOG(INFO) << "read next row";
         if (ctx->valid()) {
             _merge_heap.push(ctx);
+            // LOG(INFO) << "add next row";
         } else {
             // push next iterator in same rowset into heap
+            // LOG(INFO) << "push next iterator in same rowset into heap";
             size_t cur_order = ctx->order();
             for (size_t next_order = cur_order + 1;
                  next_order < _iterator_init_flags.size() && !_iterator_init_flags[next_order];

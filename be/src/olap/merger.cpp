@@ -220,8 +220,11 @@ Status Merger::vertical_compact_one_group(
 
     TabletReader::ReadSource read_source;
     read_source.rs_splits.reserve(src_rowset_readers.size());
+    string src_rowid;
     for (const RowsetReaderSharedPtr& rs_reader : src_rowset_readers) {
         read_source.rs_splits.emplace_back(RowSetSplits(rs_reader));
+        src_rowid.append(rs_reader->rowset()->rowset_id().to_string());
+        src_rowid.append(",");
     }
     read_source.fill_delete_predicates();
     reader_params.set_read_source(std::move(read_source));
@@ -284,7 +287,14 @@ Status Merger::vertical_compact_one_group(
         stats_output->filtered_rows = reader.filtered_rows();
     }
     RETURN_IF_ERROR(dst_rowset_writer->flush_columns(is_key));
-
+    LOG(INFO) << "tablet id:" << tablet->tablet_id()
+              << ",is_key:" << is_key
+              << ",src_rowid:" << src_rowid
+              << ",dst rowset id:" << dst_rowset_writer->rowset_id().to_string()
+              << ",dst_rowset_writer rows:" << dst_rowset_writer->num_rows()
+              << ",stats[ output:" << stats_output->output_rows
+              << ",merged:" << stats_output->merged_rows << ",filter:" << stats_output->filtered_rows
+              << "]";
     return Status::OK();
 }
 

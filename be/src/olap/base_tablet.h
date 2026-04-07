@@ -93,6 +93,8 @@ public:
     // note(tsy): we should unify the compaction score calculation finally
     uint32_t get_real_compaction_score() const;
 
+    string print_delete_bitmap();
+
 protected:
     mutable std::shared_mutex _meta_lock;
     const TabletMetaSharedPtr _tablet_meta;

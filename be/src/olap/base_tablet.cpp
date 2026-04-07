@@ -102,4 +102,18 @@ int32_t BaseTablet::max_version_config() {
     return max_version;
 }
 
+string BaseTablet::print_delete_bitmap() {
+    std::ostringstream oss;
+    const auto& dbt = tablet_meta()->delete_bitmap();
+    for (const auto& dd : dbt.delete_bitmap) {
+        const auto& bk = dd.first;
+        const RowsetId& rs = std::get<0>(bk); 
+        const auto& version = std::get<2>(bk); 
+
+        oss << "Tablet ID: " << tablet_id() << ",Rowset ID:" << rs.to_string()
+            << ", Version: " << version << ",cardinality:" << dd.second.cardinality() << ";";
+    }
+    return oss.str();
+}
+
 } // namespace doris

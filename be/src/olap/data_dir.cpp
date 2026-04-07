@@ -666,7 +666,11 @@ Status DataDir::load() {
             auto bitmap = delete_bitmap_pb.segment_delete_bitmaps(i).data();
             tablet->tablet_meta()->delete_bitmap().delete_bitmap[{rst_id, seg_id, version}] =
                     roaring::Roaring::read(bitmap);
+            LOG(INFO) << "load delete bitmap from rocksdb ,tablet:" << tablet_id
+                      << ",version:" << version << ",rowset:" << rst_id.to_string();
         }
+        LOG(INFO) << "current delete bitmap from rocksdb ,tablet:" << tablet_id
+                      << tablet->print_delete_bitmap();
         return true;
     };
     MonotonicStopWatch dbm_timer;

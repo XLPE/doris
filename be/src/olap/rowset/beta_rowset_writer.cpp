@@ -182,10 +182,12 @@ Status BetaRowsetWriter::_generate_delete_bitmap(int32_t segment_id) {
         std::shared_lock meta_rlock(tablet->get_header_lock());
         specified_rowsets = tablet->get_rowset_by_ids(&_context.mow_context->rowset_ids);
     }
+    LOG(INFO) << "delete bitmap监控,"  << tablet->print_delete_bitmap();
     OlapStopWatch watch;
     RETURN_IF_ERROR(tablet->calc_delete_bitmap(rowset_ptr, segments, specified_rowsets,
                                                _context.mow_context->delete_bitmap,
                                                _context.mow_context->max_version, nullptr));
+    LOG(INFO) << "delete bitmap监控,"  << tablet->print_delete_bitmap();
     size_t total_rows = std::accumulate(
             segments.begin(), segments.end(), 0,
             [](size_t sum, const segment_v2::SegmentSharedPtr& s) { return sum += s->num_rows(); });
