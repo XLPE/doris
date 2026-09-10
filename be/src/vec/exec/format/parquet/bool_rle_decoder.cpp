@@ -91,6 +91,9 @@ Status BoolRLEDecoder::_decode_values(MutableColumnPtr& doris_column, DataTypePt
             break;
         }
         case ColumnSelectVector::NULL_DATA: {
+            // Null values are not decoded, fill the gap with zeroes so that the
+            // buffer never keeps uninitialized bytes for null entries.
+            memset(column_data.data() + data_index, 0, run_length);
             data_index += run_length;
             break;
         }

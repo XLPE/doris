@@ -67,6 +67,9 @@ Status ByteStreamSplitDecoder::_decode_values(MutableColumnPtr& doris_column,
             break;
         }
         case ColumnSelectVector::NULL_DATA: {
+            // Null values are not decoded, fill the gap with zeroes so that the
+            // buffer never keeps uninitialized bytes for null entries.
+            memset(raw_data + data_index, 0, run_length * _type_length);
             data_index += run_length * _type_length;
             break;
         }

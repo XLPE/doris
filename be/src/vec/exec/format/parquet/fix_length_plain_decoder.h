@@ -62,6 +62,11 @@ public:
                 break;
             }
             case ColumnSelectVector::NULL_DATA: {
+                // Null values are not decoded from the page, so the underlying buffer
+                // keeps whatever bytes were there before (uninitialized or stale data).
+                // The converters do not check the null map, so fill the gap with zeroes,
+                // otherwise garbage will be treated as a valid value later.
+                memset(raw_data + data_index, 0, run_length * _type_length);
                 data_index += run_length * _type_length;
                 break;
             }
